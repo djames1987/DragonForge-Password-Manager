@@ -1,5 +1,7 @@
 # Phase 6 — Browser Extension Foundation
 
+**Status: COMPLETE — manually verified on Windows with Microsoft Edge and Google Chrome.**
+
 ## Scope
 
 Phase 6 adds the first DragonForge browser integration for Chromium-family browsers (Google Chrome and Microsoft Edge).
@@ -103,3 +105,29 @@ Output: `dist\dragonforge-browser-extension.zip`.
 ## Current limitations
 
 Phase 6 intentionally does not yet include automatic page-load autofill, automatic form submission, passkeys, TOTP, save/update prompts, browser-side vault editing, Firefox packaging, Safari support, extension-store publishing/signing, or enterprise deployment.
+
+## Completion verification
+
+Phase 6 was closed only after successful manual end-to-end testing on Windows in both Microsoft Edge and Google Chrome.
+
+The verified flow covered:
+
+- browser-specific native-host registry registration;
+- exact extension-ID presence in `allowed_origins`;
+- native-host manifest parsing and executable discovery;
+- desktop `bridge.json` discovery;
+- authenticated localhost bridge connectivity;
+- unlocked-vault status through the native-messaging host;
+- browser search using the camelCase protocol fields emitted by the extension;
+- site-scoped credential retrieval;
+- one-shot username/password fill into a real login form;
+- successful login using the values filled by DragonForge.
+
+The final browser diagnostic can verify a specific installed extension origin with:
+
+```powershell
+.\scripts\test-browser-native-host.ps1 -Browser Chrome -ExtensionId <CHROME_ID>
+.\scripts\test-browser-native-host.ps1 -Browser Edge -ExtensionId <EDGE_ID>
+```
+
+The Phase 6 Windows CI also parses the PowerShell browser integration scripts before building, preventing malformed installer/diagnostic scripts from silently passing source control.
