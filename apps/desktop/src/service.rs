@@ -24,6 +24,8 @@ pub enum DesktopError {
     InvalidInput(String),
     #[error("invalid Account Secret")]
     InvalidAccountSecret,
+    #[error("{0}")]
+    Sync(#[from] crate::sync::SyncError),
 }
 
 pub type DesktopResult<T> = Result<T, DesktopError>;
@@ -388,6 +390,65 @@ impl DesktopService {
         let session = session.as_ref().ok_or(DesktopError::Locked)?;
         session.vault.verify_integrity()?;
         Ok(())
+    }
+
+    pub fn sync_status(&self) -> DesktopResult<crate::sync::SyncStatus> {
+        let session = self.lock_session()?;
+        let session = session.as_ref().ok_or(DesktopError::Locked)?;
+        Ok(crate::sync::status(&session.path)?)
+    }
+
+    pub fn configure_sync(
+        &self,
+        server_url: &str,
+        sync_token: &str,
+    ) -> DesktopResult<crate::sync::SyncStatus> {
+        let session = self.lock_session()?;
+        let session = session.as_ref().ok_or(DesktopError::Locked)?;
+        Ok(crate::sync::configure(
+            &session.path,
+            server_url,
+            sync_token,
+        )?)
+    }
+
+    pub fn remove_sync(&self) -> DesktopResult<crate::sync::SyncStatus> {
+        let session = self.lock_session()?;
+        let session = session.as_ref().ok_or(DesktopError::Locked)?;
+        Ok(crate::sync::remove(&session.path)?)
+    }
+
+    pub fn sync_now(&self) -> DesktopResult<crate::sync::SyncOutcome> {
+        let mut session_guard = self.lock_session()?;
+        let session = session_guard.as_ref().ok_or(DesktopError::Locked)?;
+        let path = session.path.clone();
+        let vault_id = session.vault.vault_id().to_owned();
+        let execution = crate::sync::sync(&path, &vault_id)?;
+
+        if let Some(pull) = execution.pull {
+            session_guard.take();
+            crate::sync::commit_pull(&path, pull)?;
+        }
+
+        Ok(execution.outcome)
+    }
+
+    pub fn resolve_sync_conflict(
+        &self,
+        strategy: &str,
+    ) -> DesktopResult<crate::sync::SyncOutcome> {
+        let mut session_guard = self.lock_session()?;
+        let session = session_guard.as_ref().ok_or(DesktopError::Locked)?;
+        let path = session.path.clone();
+        let vault_id = session.vault.vault_id().to_owned();
+        let execution = crate::sync::resolve(&path, &vault_id, strategy)?;
+
+        if let Some(pull) = execution.pull {
+            session_guard.take();
+            crate::sync::commit_pull(&path, pull)?;
+        }
+
+        Ok(execution.outcome)
     }
 
     pub fn export_backup(&self, destination: impl AsRef<Path>) -> DesktopResult<()> {
