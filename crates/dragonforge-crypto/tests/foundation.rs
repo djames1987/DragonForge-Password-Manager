@@ -119,10 +119,10 @@ fn hkdf_domain_separation_produces_distinct_keys() {
         .derive_key(&root, None, b"dragonforge/vault/files/v1")
         .unwrap();
     assert!(!items.ct_eq(&files));
-    assert_eq!(
+    assert!(matches!(
         deriver.derive_key(&root, None, b""),
         Err(CryptoError::EmptyContext)
-    );
+    ));
 }
 
 #[test]
