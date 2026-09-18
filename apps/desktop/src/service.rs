@@ -258,7 +258,9 @@ impl DesktopService {
         page_url: &str,
     ) -> DesktopResult<BrowserCredential> {
         let requested_host = normalized_host(page_url).ok_or_else(|| {
-            DesktopError::InvalidInput("the active tab URL is not a supported web origin".to_owned())
+            DesktopError::InvalidInput(
+                "the active tab URL is not a supported web origin".to_owned(),
+            )
         })?;
 
         let session = self.lock_session()?;
