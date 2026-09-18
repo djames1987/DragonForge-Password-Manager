@@ -12,7 +12,12 @@ function sendNative(request) {
     chrome.runtime.sendNativeMessage(NATIVE_HOST_NAME, request, (response) => {
       const runtimeError = chrome.runtime.lastError;
       if (runtimeError) {
-        reject(new Error("DragonForge desktop connection is unavailable."));
+        reject(
+          new Error(
+            "DragonForge native messaging failed: " +
+              (runtimeError.message || "unknown browser error")
+          )
+        );
         return;
       }
       if (!response) {
