@@ -2,20 +2,136 @@
 
 ## Current phase
 
-Phase 2 adds the post-quantum and hybrid public-key layer on top of the Phase 1 symmetric/password foundation.
+Phase 3 adds the persistent local encrypted vault on top of the Phase 1 symmetric/password foundation and the Phase 2 post-quantum/hybrid layer.
 
-## Password-based derivation
+## Password and Account Secret unlock derivation
 
-The password KDF is Argon2id v1.3 with a 32-byte output. `Argon2idConfig` rejects configurations below the project's current baseline:
+The password KDF is Argon2id v1.3 with a 32-byte output. `Argon2idConfig` rejects configurations below the project's baseline:
 
 - memory: at least 19 MiB (19,456 KiB)
 - iterations: at least 2
 - lanes: at least 1
 - salt: at least 16 bytes
 
-The current library default is 64 MiB, 3 iterations, and 1 lane.
+The current vault default is 64 MiB, 3 iterations, and 1 lane with a fresh 32-byte salt.
 
-A password-derived key is intended to unwrap a randomly generated vault master key. Vault records should not be encrypted directly with a master password.
+Phase 3 uses the following unlock construction:
+
+```text
+Master Password
+      │
+      │ Argon2id(vault salt)
+      ▼
+Password Key (256-bit)
+      │
+      │ HKDF-SHA-512
+      │ salt = external 256-bit Account Secret
+      │ info = "dragonforge/vault/unlock/v1"
+      ▼
+Unlock Key (256-bit)
+      │
+      └── AES-256-GCM wraps random Vault Master Key
+```
+
+The Account Secret is returned separately at vault creation and is not serialized inside the vault file.
+
+## Vault Master Key hierarchy
+
+Each vault gets a random 256-bit VMK.
+
+```text
+Vault Master Key
+      │
+      │ HKDF-SHA-512
+      │ info = "dragonforge/vault/item-wrap/v1"
+      ▼
+Item-Wrap Key
+```
+
+Every vault item gets a new random 256-bit item key:
+
+```text
+Item-Wrap Key
+      │
+      ├── wraps random Item Key A
+      │        └── AES-256-GCM encrypts Item A payload
+      │
+      ├── wraps random Item Key B
+      │        └── AES-256-GCM encrypts Item B payload
+      │
+      └── ...
+```
+
+Updates generate a fresh item key and fresh AEAD nonce before replacing the encrypted record.
+
+## Authenticated record binding
+
+The wrapped item key is context-bound to the vault ID and item ID.
+
+The encrypted item payload uses AAD containing:
+
+```text
+vault ID
+item ID
+record revision
+```
+
+The encrypted payload also contains its own item ID and timestamps. Decryption checks those values against the outer authenticated record metadata.
+
+This makes record/ciphertext substitution or revision tampering fail authentication or integrity checks.
+
+## Metadata protection
+
+Phase 3 keeps the following inside the encrypted item payload:
+
+- item name/title
+- username
+- password
+- URL
+- notes
+- tags
+- favorite flag
+- item-specific data
+
+The local vault file necessarily exposes structural metadata such as:
+
+- vault format version
+- vault ID
+- KDF parameters/salt
+- wrapped VMK envelope
+- number of encrypted records
+- opaque item UUIDs
+- record revisions/timestamps
+- ciphertext sizes
+
+Search is therefore performed locally by decrypting records after unlock. Phase 3 deliberately does not create a plaintext or server-searchable index.
+
+## Master-password changes
+
+Changing the master password generates a new Argon2id salt and derives a new unlock key using the same external Account Secret.
+
+Only the VMK envelope is rewrapped. Existing item ciphertexts and item keys do not need to be re-encrypted merely because the master password changed.
+
+## Backups
+
+Phase 3 backup export writes the already-encrypted versioned vault representation to another file.
+
+Backup import:
+
+1. opens the source using the supplied master password and Account Secret;
+2. performs full item integrity verification;
+3. refuses to overwrite an existing destination;
+4. only then writes the encrypted backup to the destination.
+
+The Account Secret is intentionally not embedded into the backup file.
+
+## Persistent storage
+
+The local vault is serialized as versioned JSON containing encrypted envelopes and ciphertext byte arrays.
+
+JSON is used in Phase 3 for inspectability and testability, not because ciphertext requires text encoding. A later phase can move to a compact binary container while retaining the versioned cryptographic semantics.
+
+Writes use a same-directory temporary file, file synchronization, backup rename, and recovery path. On Unix the temporary file is created with mode `0600`.
 
 ## Symmetric encryption
 
@@ -23,22 +139,20 @@ AES-256-GCM is used for authenticated symmetric encryption.
 
 Requirements:
 
-- 256-bit key.
-- Fresh 96-bit nonce for every encryption under a given key.
-- Associated data for record identity and protocol binding.
-- Authentication failure on modified ciphertext or mismatched AAD.
-
-## HKDF
-
-HKDF-SHA-512 is used for domain-separated subkey derivation and for the Phase 2 hybrid combiner.
+- 256-bit keys
+- fresh 96-bit nonce for every encryption under a given key
+- associated data for record/protocol identity
+- authentication failure on modified ciphertext or mismatched AAD
 
 ## Secret key handling
 
 `SecretKey` wraps 32 bytes and intentionally does not implement ordinary serialization, `Clone`, or `Copy`. Its debug output is redacted and its backing memory is zeroized on drop.
 
-Phase 2 PQ private-key containers also avoid Serde serialization. Explicit seed export returns `Zeroizing<Vec<u8>>` so callers must opt into handling private material.
+The Phase 3 `AccountSecret` is also a redacted, zeroizing 32-byte type. Explicit export returns a `Zeroizing<[u8; 32]>`.
 
-Zeroization is defense in depth and cannot guarantee elimination of every historical compiler/runtime copy.
+Login passwords and secure-note bodies are held in types that zeroize their backing strings on drop.
+
+Zeroization remains defense in depth and cannot guarantee elimination of every historical compiler/runtime copy.
 
 ## ML-KEM-768
 
@@ -51,10 +165,6 @@ Current serialized sizes:
 - ciphertext: 1088 bytes
 - resulting shared secret: 32 bytes
 
-Public keys are validated during import. Private state is reconstructed from the 64-byte seed form rather than persisting expanded internal key state.
-
-Standalone ML-KEM APIs are exposed for testing and future protocol integration.
-
 ## ML-DSA-65
 
 Phase 2 implements ML-DSA-65 through RustCrypto `ml-dsa`.
@@ -65,123 +175,54 @@ Current serialized sizes:
 - verifying key: 1952 bytes
 - signature: 3309 bytes
 
-The API supports:
-
-- key generation
-- seed restoration
-- signing
-- signature parsing
-- verification
-- rejection of modified messages/signatures
-
-ML-DSA-65 is intended for future device identity and authorization records.
-
 ## Hybrid X25519 + ML-KEM-768
 
-DragonForge Phase 2 defines an application-level hybrid KEM for future device enrollment and sharing protocols.
+DragonForge defines an application-level X25519 + ML-KEM-768 hybrid construction for future device enrollment and sharing protocols.
 
-Recipient state:
+Both 32-byte shared secrets are fed into HKDF-SHA-512, and the transcript binds the caller context, recipient public keys, sender ephemeral X25519 public key, and ML-KEM ciphertext.
 
-```text
-long-term X25519 private key
-+
-ML-KEM-768 decapsulation key
-```
+Non-contributory X25519 peers are rejected.
 
-Published recipient material:
+This application-level construction is **not claimed to be the TLS 1.3 X25519MLKEM768 wire format**.
 
-```text
-X25519 public key
-+
-ML-KEM-768 encapsulation key
-```
+## Versioning and crypto agility
 
-Sender operation:
+Symmetric `EncryptedEnvelope` objects contain a format version and cipher-suite identifier.
 
-```text
-fresh ephemeral X25519 key
-        │
-        ├── X25519 shared secret
-        │
-recipient X25519 public key
-
-recipient ML-KEM public key
-        │
-        └── ML-KEM shared secret + ML-KEM ciphertext
-```
-
-The two 32-byte shared secrets are concatenated and processed through HKDF-SHA-512.
-
-The HKDF transcript includes length-delimited fields for:
-
-- DragonForge hybrid protocol domain
-- caller-supplied protocol context
-- recipient X25519 public key
-- recipient ML-KEM public key
-- sender ephemeral X25519 public key
-- ML-KEM ciphertext
-
-This prevents the final key from being independent of the handshake transcript or intended protocol use.
-
-The X25519 result must be contributory. All-zero/non-contributory peer values are rejected.
-
-### Important interoperability note
-
-This Phase 2 application-level hybrid construction is **not claimed to be the TLS 1.3 X25519MLKEM768 wire format**. TLS hybrid negotiation belongs to the transport layer and will be implemented through a standards-compliant TLS stack in a later phase.
-
-## Public and private serialization boundaries
-
-Public keys and ciphertext structures can be serialized.
-
-Private ML-KEM, ML-DSA, and X25519 key containers are intentionally not Serde-serializable. Future encrypted device-key persistence must wrap private seeds/keys under device or vault key encryption rather than place them directly in general application data structures.
-
-## Versioned encrypted envelopes
-
-Every symmetric `EncryptedEnvelope` carries a format version and cipher-suite identifier. Decryption checks both before invoking the cipher.
-
-## Key wrapping
-
-Phase 1 key wrapping remains the mechanism for encrypting one 256-bit secret key beneath another using authenticated encryption and domain-separated AAD.
-
-## Dependency selection
-
-Phase 2 deliberately does not use `pqcrypto-*` because that ecosystem became unmaintained after the upstream PQClean archival process. The current implementation uses pure-Rust RustCrypto ML-KEM and ML-DSA crates and `x25519-dalek`.
-
-These upstream implementations still require independent review before DragonForge can claim production assurance.
+The vault file itself also carries a separate vault format version. Future migrations must explicitly parse and migrate older formats rather than silently reinterpret ciphertext.
 
 ## Tests
 
-The integration test suite covers:
+Phase 3 integration tests cover:
 
-- ML-KEM encapsulate/decapsulate agreement
-- ML-KEM seed restore
-- ML-KEM malformed public/ciphertext lengths
-- ML-DSA sign/verify
-- ML-DSA modified-message rejection
-- ML-DSA modified-signature rejection
-- ML-DSA seed restore
-- invalid ML-DSA public key lengths
-- hybrid agreement
-- protocol-context binding
-- empty-context rejection
-- non-contributory X25519 rejection
-- hybrid ciphertext serialization round trip
-- private-key debug redaction
+- create/save/lock/unlock/reload
+- login and secure-note round trips
+- plaintext metadata leakage checks
+- wrong-password rejection
+- wrong-Account-Secret rejection
+- local search
+- update and delete persistence
+- VMK rewrap on master-password change
+- backup export/import
+- ciphertext tamper detection
+- password-generator character-class guarantees
+- item-type round trips
 
-See `docs/PHASE2_TESTING.md`.
+Earlier Phase 1 and Phase 2 regression suites remain part of the workspace CI gate.
 
 ## Remaining non-goals
 
-Phase 2 still does not provide:
+Phase 3 still does not provide:
 
-- persistent vault storage
-- a vault master-key hierarchy
-- account authentication
+- desktop or mobile UI
+- browser extension/autofill
+- attachments
+- TOTP records
+- passkeys
 - sync/server protocols
-- device enrollment workflows
-- recovery
-- secure item sharing
-- browser/mobile integration
-- rollback-resistant state logs
+- rollback-resistant multi-device state logs
+- device enrollment workflow
+- account recovery UX
+- secure sharing
 - standards-compliant PQ/T TLS configuration
 - independent cryptographic audit
