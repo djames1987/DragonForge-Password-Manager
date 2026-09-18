@@ -1,6 +1,7 @@
 use std::{env, net::SocketAddr, sync::Arc};
 
 use dragonforge_sync_server::{AppState, InMemoryStore, SyncStore, build_router};
+use zeroize::Zeroize;
 
 #[cfg(feature = "postgres")]
 use dragonforge_sync_server::PostgresStore;
@@ -17,7 +18,7 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     let bind: SocketAddr = env::var("DRAGONFORGE_SYNC_BIND")
         .unwrap_or_else(|_| "127.0.0.1:8787".to_owned())
         .parse()?;
-    let admin_token = env::var("DRAGONFORGE_SYNC_ADMIN_TOKEN").ok();
+    let mut admin_token = env::var("DRAGONFORGE_SYNC_ADMIN_TOKEN").ok();
 
     #[cfg(feature = "postgres")]
     let store: Arc<dyn SyncStore> = if let Ok(database_url) =
@@ -51,7 +52,11 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
         );
     }
 
-    let router = build_router(AppState::new(store, admin_token.as_deref()));
+    let state = AppState::new(store, admin_token.as_deref());
+    if let Some(token) = admin_token.as_mut() {
+        token.zeroize();
+    }
+    let router = build_router(state);
     let listener = tokio::net::TcpListener::bind(bind).await?;
     eprintln!("DragonForge sync server listening on {bind}");
     axum::serve(listener, router).await?;
