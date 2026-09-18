@@ -427,7 +427,7 @@ impl DesktopService {
 
         if let Some(pull) = execution.pull {
             session_guard.take();
-            crate::sync::commit_pull(&path, pull)?;
+            crate::sync::commit_pull(&path, &vault_id, pull)?;
         }
 
         Ok(execution.outcome)
