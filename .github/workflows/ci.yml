@@ -39,11 +39,25 @@ jobs:
       - name: Cache Rust build
         uses: Swatinem/rust-cache@v2
 
+      - name: Install Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
       - name: Check formatting
         run: cargo fmt --all --check
 
       - name: Clippy
         run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+
+      - name: Browser extension syntax
+        run: |
+          node --check apps/browser-extension/src/core.js
+          node --check apps/browser-extension/src/background.js
+          node --check apps/browser-extension/ui/popup.js
+
+      - name: Browser extension tests
+        run: node --test apps/browser-extension/tests/core.test.mjs apps/browser-extension/tests/manifest.test.mjs
 
       - name: Debug workspace tests
         run: cargo test --workspace --all-features
@@ -55,7 +69,10 @@ jobs:
         run: cargo test --workspace --all-features --release
 
       - name: Desktop release build
-        run: cargo build -p dragonforge-desktop --release
+        run: cargo build -p dragonforge-desktop --release --bin dragonforge-desktop
+
+      - name: Native host release build
+        run: cargo build -p dragonforge-desktop --release --bin dragonforge-native-host
 
   windows-desktop:
     name: Windows desktop build
@@ -79,4 +96,7 @@ jobs:
         run: cargo test -p dragonforge-desktop --test desktop_service -- --nocapture
 
       - name: Build Windows desktop release
-        run: cargo build -p dragonforge-desktop --release
+        run: cargo build -p dragonforge-desktop --release --bin dragonforge-desktop
+
+      - name: Build Windows native messaging host
+        run: cargo build -p dragonforge-desktop --release --bin dragonforge-native-host
