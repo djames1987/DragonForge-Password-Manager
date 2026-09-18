@@ -187,6 +187,7 @@ impl Drop for BrowserBridge {
     }
 }
 
+#[allow(clippy::needless_return)]
 pub fn bridge_endpoint_path() -> io::Result<PathBuf> {
     if let Some(path) = std::env::var_os("DRAGONFORGE_BRIDGE_ENDPOINT") {
         return Ok(PathBuf::from(path));
