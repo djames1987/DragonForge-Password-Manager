@@ -4,7 +4,7 @@
 
 DragonForge Password Manager is under active development through **Phase 6 — Browser Extension Foundation**.
 
-The project contains working cryptographic primitives, post-quantum/hybrid components, a hardened persistent local vault, a Tauri desktop application, and an initial Chromium browser-extension bridge. It has **not** received an independent cryptographic or application-security audit and must not yet be trusted with production credentials or other high-value secrets.
+The project contains working cryptographic primitives, post-quantum/hybrid components, a hardened persistent local vault, a Tauri desktop application, and a Chromium browser-extension bridge that has been manually verified on Windows with Microsoft Edge and Google Chrome. It has **not** received an independent cryptographic or application-security audit and must not yet be trusted with production credentials or other high-value secrets.
 
 ## Core security principles
 
