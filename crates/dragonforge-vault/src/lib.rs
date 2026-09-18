@@ -21,4 +21,4 @@ pub use model::{
     LoginItem, SecureNoteItem, VaultItem, VaultItemData, VaultItemKind, VaultItemSummary,
 };
 pub use password::{PasswordPolicy, generate_password};
-pub use vault::{AccountSecret, LockedVault, Vault};
+pub use vault::{AccountSecret, LockedVault, Vault, validate_encrypted_vault_bytes};
