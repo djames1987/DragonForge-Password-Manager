@@ -6,7 +6,7 @@ use axum::{
     extract::{Path, State},
     http::{HeaderMap, HeaderValue, StatusCode, header},
     response::{IntoResponse, Response},
-    routing::{get, post, put},
+    routing::{get, post},
 };
 use dragonforge_crypto::constant_time_eq;
 use sha2::{Digest, Sha256};
