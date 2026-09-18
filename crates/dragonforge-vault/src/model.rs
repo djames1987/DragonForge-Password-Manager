@@ -21,7 +21,7 @@ pub struct SecureNoteItem {
     pub notes: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Zeroize, ZeroizeOnDrop)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum VaultItemData {
     Login(LoginItem),
@@ -38,7 +38,7 @@ impl VaultItemData {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Zeroize, ZeroizeOnDrop)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VaultItem {
     pub id: String,
     pub name: String,
