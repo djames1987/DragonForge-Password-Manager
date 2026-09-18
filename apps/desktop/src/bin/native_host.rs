@@ -4,7 +4,7 @@ use std::{
 };
 
 use dragonforge_desktop::{
-    BrowserRequest, BrowserResponse, forward_native_request, BROWSER_PROTOCOL_VERSION,
+    BROWSER_PROTOCOL_VERSION, BrowserRequest, BrowserResponse, forward_native_request,
 };
 use zeroize::Zeroize;
 
@@ -34,10 +34,9 @@ fn run() -> io::Result<()> {
             Ok(request) if request.version == BROWSER_PROTOCOL_VERSION => {
                 forward_native_request(&request)
             }
-            Ok(_) => BrowserResponse::error(
-                "unsupportedVersion",
-                "unsupported browser protocol version",
-            ),
+            Ok(_) => {
+                BrowserResponse::error("unsupportedVersion", "unsupported browser protocol version")
+            }
             Err(_) => BrowserResponse::error("protocolError", "invalid native messaging request"),
         };
         message.zeroize();
@@ -101,7 +100,9 @@ mod tests {
         let mut framed = Vec::new();
         write_native_message(&mut framed, payload).unwrap();
 
-        let decoded = read_native_message(&mut framed.as_slice()).unwrap().unwrap();
+        let decoded = read_native_message(&mut framed.as_slice())
+            .unwrap()
+            .unwrap();
         assert_eq!(decoded, payload);
     }
 
