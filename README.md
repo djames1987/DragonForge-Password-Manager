@@ -44,41 +44,33 @@ DragonForge Password Manager is a security-first, zero-knowledge password manage
 - Defensive maximum item count and per-item ciphertext size.
 - Upper bounds on attacker-controlled Argon2 memory, iterations, lanes, and salt size.
 - Structural validation before expensive password derivation or decryption.
-- Vault/item UUID validation.
-- Duplicate item-ID rejection.
+- Vault/item UUID validation and duplicate-ID rejection.
 - Zero-revision and revision-overflow rejection.
 - Wrapped-key and encrypted-payload envelope-length validation.
 - Timestamp-order validation.
-- Version inspection API and explicit migration-status scaffolding.
-- Current-format rejection of unknown/future versions.
-- Hardened atomic writes with parent-directory synchronization on Unix.
-- Recovery from the last complete backup if the live file is missing.
-- Refusal to promote orphan temporary files as valid vaults.
+- Version inspection and migration-status scaffolding.
+- Hardened atomic writes and backup recovery.
 - Adversarial serialized-vault mutation tests.
-- 100-item encrypted storage/search stress test.
-- 50-consecutive-update revision stress test.
-- Automated Windows verification script with timestamped uploadable logs.
-- CI now runs debug workspace tests, Phase 4 hardening serially, and optimized release tests.
-
+- Storage/search/revision stress testing.
+- Automated Windows verification with uploadable logs.
 
 ### Phase 5 — Desktop Application Foundation
 
-- Native desktop shell built with Tauri 2 and the existing Rust vault core.
+- Native Tauri 2 desktop shell over the existing Rust vault core.
 - Modern dark three-pane UI with responsive navigation, searchable item list, and detail view.
-- Create/open vault flows using native file pickers.
+- Create/open vault flows with native file pickers.
 - One-time Account Secret recovery screen after vault creation.
 - Login and secure-note create/edit/delete workflows.
-- Favorites and local encrypted-vault search.
-- Built-in password generation.
+- Favorites, search, password generation, and password reveal/copy controls.
 - Encrypted backup export and full-vault integrity verification.
 - Master-password change workflow requiring the Account Secret.
 - Rust-owned unlocked vault session; the frontend never owns the vault object or VMK.
-- Command inputs containing master passwords and Account Secrets are zeroized after use.
+- Credential-bearing command inputs are zeroized after use.
 - Strict Content Security Policy and no localStorage/sessionStorage secret persistence.
-- Vault content is rendered with DOM text nodes rather than injected HTML.
-- Locking the vault drops the Rust session and scrubs decrypted values from the webview DOM.
+- Vault-controlled content is rendered with DOM text APIs rather than injected HTML.
+- Locking drops the Rust session and scrubs decrypted UI state.
 - Desktop service integration tests cover create/unlock/CRUD/search/password generation/backup.
-- Linux CI installs the Tauri/WebKit build prerequisites and checks the desktop application with the rest of the workspace.
+- CI builds and tests the desktop app with the rest of the workspace.
 
 The post-quantum implementation uses the pure-Rust RustCrypto `ml-kem` and `ml-dsa` crates rather than the older unmaintained `pqcrypto-*` bindings.
 
@@ -86,56 +78,64 @@ The post-quantum implementation uses the pure-Rust RustCrypto `ml-kem` and `ml-d
 
 ```text
 .
-├── apps/\n│   └── desktop/\n│       ├── src/\n│       ├── tests/\n│       └── ui/\n├── crates/
+├── apps/
+│   └── desktop/
+│       ├── src/
+│       ├── tests/
+│       └── ui/
+├── crates/
 │   ├── dragonforge-crypto/
 │   └── dragonforge-vault/
-│       ├── src/
-│       │   ├── error.rs
-│       │   ├── format.rs
-│       │   ├── limits.rs
-│       │   ├── model.rs
-│       │   ├── password.rs
-│       │   ├── storage.rs
-│       │   └── vault.rs
-│       └── tests/
-│           ├── hardening.rs
-│           └── local_vault.rs
-├── scripts/
-│   ├── run-phase4-tests.cmd
-│   └── run-phase4-tests.ps1
 ├── docs/
 │   ├── CRYPTOGRAPHY.md
 │   ├── PHASE2_TESTING.md
 │   ├── PHASE3_TESTING.md
 │   ├── PHASE4_TESTING.md
+│   ├── PHASE5_DESKTOP.md
+│   ├── PHASE5_TESTING.md
 │   └── VAULT_FORMAT.md
+├── scripts/
+│   ├── run-phase4-tests.cmd
+│   ├── run-phase4-tests.ps1
+│   ├── run-phase5-tests.cmd
+│   └── run-phase5-tests.ps1
 └── .github/workflows/ci.yml
 ```
 
-## Run the desktop application\n\nOn Windows, after installing the Rust toolchain and Microsoft C++ build tools/WebView2 prerequisites, run:\n\n```powershell\ncargo run -p dragonforge-desktop\n```\n\nThe desktop application opens directly from the checked-in HTML/CSS/JavaScript frontend; there is no Node/npm build step in Phase 5.\n\nSee [docs/PHASE5_DESKTOP.md](docs/PHASE5_DESKTOP.md) for the desktop architecture and [docs/PHASE5_TESTING.md](docs/PHASE5_TESTING.md) for verification.\n\n## Automated Windows verification
+## Run the desktop application
 
-After pulling the repository, run:
+On Windows, after installing the Rust toolchain and Microsoft C++ build tools/WebView2 prerequisites:
 
 ```powershell
-.\scripts\run-phase4-tests.ps1
+cargo run -p dragonforge-desktop
 ```
 
-or double-click/run:
+The Phase 5 frontend is checked-in HTML/CSS/JavaScript, so there is no Node/npm build step.
+
+See [docs/PHASE5_DESKTOP.md](docs/PHASE5_DESKTOP.md) for the desktop architecture.
+
+## Automated Phase 5 verification
+
+After pulling the repository:
+
+```powershell
+.\scripts\run-phase5-tests.ps1
+```
+
+or:
 
 ```text
-scripts\run-phase4-tests.cmd
+scripts\run-phase5-tests.cmd
 ```
 
-The script runs all noninteractive quality gates and tests, repeats the Phase 4 hardening suite three times by default, runs release-mode tests, and creates:
+The runner performs the noninteractive quality gates, workspace tests, desktop integration tests, Phase 4 regression tests, optimized release tests, and a release desktop build. It creates:
 
 ```text
 test-logs\dragonforge-phase5-YYYYMMDD-HHMMSS.log
-test-logs\dragonforge-phase4-YYYYMMDD-HHMMSS.log.sha256
+test-logs\dragonforge-phase5-YYYYMMDD-HHMMSS.log.sha256
 ```
 
-Upload the `.log` file when you want the results reviewed.
-
-See [docs/PHASE5_TESTING.md](docs/PHASE5_TESTING.md).
+See [docs/PHASE5_TESTING.md](docs/PHASE5_TESTING.md) for the automated and manual verification checklist.
 
 ## Manual commands
 
@@ -143,8 +143,10 @@ See [docs/PHASE5_TESTING.md](docs/PHASE5_TESTING.md).
 cargo fmt --all --check
 cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo test --workspace --all-features
+cargo test -p dragonforge-desktop --test desktop_service -- --nocapture
 cargo test -p dragonforge-vault --test hardening -- --test-threads=1
 cargo test --workspace --all-features --release
+cargo build -p dragonforge-desktop --release
 ```
 
 ## Security status
