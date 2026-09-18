@@ -1,23 +1,25 @@
 use std::{
+    collections::HashSet,
     path::{Path, PathBuf},
     time::{SystemTime, UNIX_EPOCH},
 };
 
 use dragonforge_crypto::{
     AeadCipher, Aes256GcmCipher, Argon2idConfig, Argon2idKdf, EncryptedEnvelope, HkdfSha512,
-    KeyDeriver, OsRandom, PasswordKdf, RandomSource, SecretKey, generate_salt, generate_secret_key,
-    unwrap_key, wrap_key,
+    KeyDeriver, OsRandom, PasswordKdf, RandomSource, SecretKey, CURRENT_ENVELOPE_VERSION,
+    MIN_SALT_LEN, generate_salt, generate_secret_key, unwrap_key, wrap_key,
 };
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 
 use crate::{
-    LoginItem, Result, SecureNoteItem, VaultError, VaultItem, VaultItemData, VaultItemSummary,
+    CURRENT_VAULT_FORMAT_VERSION, LoginItem, MAX_ITEM_CIPHERTEXT_BYTES, MAX_KDF_ITERATIONS,
+    MAX_KDF_LANES, MAX_KDF_MEMORY_KIB, MAX_KDF_SALT_BYTES, MAX_VAULT_ITEMS,
+    Result, SecureNoteItem, VaultError, VaultItem, VaultItemData, VaultItemSummary,
+    limits::{MIN_AEAD_CIPHERTEXT_BYTES, WRAPPED_256_BIT_KEY_CIPHERTEXT_BYTES},
     storage::{atomic_write, read_file},
 };
-
-const VAULT_FORMAT_VERSION: u16 = 1;
 const ACCOUNT_SECRET_LEN: usize = 32;
 const UNLOCK_INFO: &[u8] = b"dragonforge/vault/unlock/v1";
 const ITEM_WRAP_INFO: &[u8] = b"dragonforge/vault/item-wrap/v1";
@@ -151,7 +153,7 @@ impl Vault {
         let now = unix_time();
 
         let file = VaultFile {
-            version: VAULT_FORMAT_VERSION,
+            version: CURRENT_VAULT_FORMAT_VERSION,
             vault_id,
             created_at: now,
             updated_at: now,
@@ -186,9 +188,7 @@ impl Vault {
         }
         let bytes = read_file(&path)?;
         let file: VaultFile = serde_json::from_slice(&bytes)?;
-        if file.version != VAULT_FORMAT_VERSION {
-            return Err(VaultError::UnsupportedFormatVersion(file.version));
-        }
+        validate_vault_file(&file)?;
 
         let kdf_config =
             Argon2idConfig::new(file.kdf.memory_kib, file.kdf.iterations, file.kdf.lanes)?;
@@ -271,6 +271,11 @@ impl Vault {
         tags: Vec<String>,
         data: VaultItemData,
     ) -> Result<String> {
+        if self.file.items.len() >= MAX_VAULT_ITEMS {
+            return Err(VaultError::ResourceLimit(format!(
+                "vault contains the maximum of {MAX_VAULT_ITEMS} items"
+            )));
+        }
         let now = unix_time();
         let item = VaultItem {
             id: Uuid::new_v4().to_string(),
@@ -314,7 +319,10 @@ impl Vault {
             .position(|record| record.id == id)
             .ok_or_else(|| VaultError::ItemNotFound(id.to_owned()))?;
         let old = self.decrypt_item(&self.file.items[position])?;
-        let revision = self.file.items[position].revision.saturating_add(1);
+        let revision = self.file.items[position]
+            .revision
+            .checked_add(1)
+            .ok_or_else(|| VaultError::RevisionOverflow(id.to_owned()))?;
         let now = unix_time();
         let item = VaultItem {
             id: id.to_owned(),
@@ -370,6 +378,7 @@ impl Vault {
     }
 
     pub fn verify_integrity(&self) -> Result<()> {
+        validate_vault_file(&self.file)?;
         for record in &self.file.items {
             let item = self
                 .decrypt_item(record)
@@ -438,6 +447,7 @@ impl Vault {
     }
 
     pub fn save(&self) -> Result<()> {
+        validate_vault_file(&self.file)?;
         let bytes = serde_json::to_vec_pretty(&self.file)?;
         atomic_write(&self.path, &bytes)
     }
@@ -452,6 +462,12 @@ impl Vault {
     fn encrypt_item(&self, item: &VaultItem, revision: u64) -> Result<EncryptedItemRecord> {
         let item_key = generate_secret_key(&OsRandom)?;
         let payload = serde_json::to_vec(item)?;
+        if payload.len() > MAX_ITEM_CIPHERTEXT_BYTES.saturating_sub(MIN_AEAD_CIPHERTEXT_BYTES) {
+            return Err(VaultError::ResourceLimit(format!(
+                "item {} plaintext is too large",
+                item.id
+            )));
+        }
         let payload_envelope = Aes256GcmCipher.seal(
             &OsRandom,
             &item_key,
@@ -544,4 +560,106 @@ fn unix_time() -> u64 {
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
         .as_secs()
+}
+
+
+fn validate_vault_file(file: &VaultFile) -> Result<()> {
+    if file.version != CURRENT_VAULT_FORMAT_VERSION {
+        return Err(VaultError::UnsupportedFormatVersion(file.version));
+    }
+    Uuid::parse_str(&file.vault_id).map_err(|_| {
+        VaultError::InvalidStructure("vault_id is not a valid UUID".to_owned())
+    })?;
+    if file.created_at > file.updated_at {
+        return Err(VaultError::InvalidStructure(
+            "vault created_at is later than updated_at".to_owned(),
+        ));
+    }
+    if file.kdf.salt.len() < MIN_SALT_LEN || file.kdf.salt.len() > MAX_KDF_SALT_BYTES {
+        return Err(VaultError::InvalidStructure(format!(
+            "KDF salt length {} is outside {}..={} bytes",
+            file.kdf.salt.len(),
+            MIN_SALT_LEN,
+            MAX_KDF_SALT_BYTES
+        )));
+    }
+    if file.kdf.memory_kib > MAX_KDF_MEMORY_KIB
+        || file.kdf.iterations > MAX_KDF_ITERATIONS
+        || file.kdf.lanes > MAX_KDF_LANES
+    {
+        return Err(VaultError::ResourceLimit(
+            "KDF parameters exceed Phase 4 defensive limits".to_owned(),
+        ));
+    }
+    validate_key_envelope(&file.wrapped_vmk, "wrapped VMK")?;
+
+    if file.items.len() > MAX_VAULT_ITEMS {
+        return Err(VaultError::ResourceLimit(format!(
+            "vault contains {} items; maximum is {}",
+            file.items.len(),
+            MAX_VAULT_ITEMS
+        )));
+    }
+
+    let mut ids = HashSet::with_capacity(file.items.len());
+    for record in &file.items {
+        Uuid::parse_str(&record.id).map_err(|_| {
+            VaultError::InvalidStructure(format!("item id {} is not a valid UUID", record.id))
+        })?;
+        if !ids.insert(record.id.as_str()) {
+            return Err(VaultError::InvalidStructure(format!(
+                "duplicate item id {}",
+                record.id
+            )));
+        }
+        if record.revision == 0 {
+            return Err(VaultError::InvalidStructure(format!(
+                "item {} has revision 0",
+                record.id
+            )));
+        }
+        if record.created_at > record.updated_at {
+            return Err(VaultError::InvalidStructure(format!(
+                "item {} has created_at later than updated_at",
+                record.id
+            )));
+        }
+        validate_key_envelope(&record.wrapped_item_key, "wrapped item key")?;
+        validate_payload_envelope(&record.payload, &record.id)?;
+    }
+
+    Ok(())
+}
+
+fn validate_key_envelope(envelope: &EncryptedEnvelope, label: &str) -> Result<()> {
+    if envelope.version() != CURRENT_ENVELOPE_VERSION {
+        return Err(VaultError::InvalidStructure(format!(
+            "{label} has unsupported envelope version {}",
+            envelope.version()
+        )));
+    }
+    if envelope.ciphertext().len() != WRAPPED_256_BIT_KEY_CIPHERTEXT_BYTES {
+        return Err(VaultError::InvalidStructure(format!(
+            "{label} ciphertext length is {}, expected {}",
+            envelope.ciphertext().len(),
+            WRAPPED_256_BIT_KEY_CIPHERTEXT_BYTES
+        )));
+    }
+    Ok(())
+}
+
+fn validate_payload_envelope(envelope: &EncryptedEnvelope, item_id: &str) -> Result<()> {
+    if envelope.version() != CURRENT_ENVELOPE_VERSION {
+        return Err(VaultError::InvalidStructure(format!(
+            "item {item_id} has unsupported payload envelope version {}",
+            envelope.version()
+        )));
+    }
+    let length = envelope.ciphertext().len();
+    if !(MIN_AEAD_CIPHERTEXT_BYTES..=MAX_ITEM_CIPHERTEXT_BYTES).contains(&length) {
+        return Err(VaultError::ResourceLimit(format!(
+            "item {item_id} ciphertext length {length} is outside allowed range"
+        )));
+    }
+    Ok(())
 }
