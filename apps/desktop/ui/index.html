@@ -102,7 +102,7 @@
         <span>•</span>
         <span>No cloud account required</span>
         <span>•</span>
-        <span>Phase 5 desktop foundation</span>
+        <span>Phase 8 multi-device sync</span>
       </div>
     </div>
   </section>
@@ -131,6 +131,7 @@
         <button id="new-note" class="nav-item"><span>＋</span>New secure note</button>
         <button id="verify-action" class="nav-item"><span>✓</span>Verify vault</button>
         <button id="backup-action" class="nav-item"><span>⇩</span>Encrypted backup</button>
+        <button id="sync-action" class="nav-item"><span>↻</span>Sync vault</button>
         <button id="settings-action" class="nav-item"><span>⚙</span>Security settings</button>
       </nav>
 
@@ -324,6 +325,28 @@
         <label class="field"><span>Confirm new password</span><input id="settings-password-confirm" type="password" autocomplete="new-password"></label>
         <label class="field"><span>Account Secret</span><textarea id="settings-secret" rows="2" spellcheck="false"></textarea></label>
         <button id="change-password" class="primary-button">Change master password</button>
+      </div>
+      <div class="settings-section">
+        <h3>Multi-device sync</h3>
+        <p class="muted">Synchronize the encrypted vault file through a DragonForge sync server. The server never receives your master password, Account Secret, or decrypted vault contents.</p>
+        <div id="sync-status-card" class="sync-status-card">
+          <strong id="sync-status-title">Sync not configured</strong>
+          <span id="sync-status-detail">Configure a server and 256-bit sync token to begin.</span>
+        </div>
+        <label class="field"><span>Sync server URL</span><input id="sync-server-url" type="url" autocomplete="off" placeholder="https://sync.example.com"></label>
+        <label class="field"><span>Sync token</span><input id="sync-token" type="password" autocomplete="off" spellcheck="false" placeholder="64-character sync token"></label>
+        <div class="sync-actions">
+          <button id="configure-sync" class="primary-button">Save sync settings</button>
+          <button id="settings-sync-now" class="secondary-button">Sync now</button>
+          <button id="remove-sync" class="danger-button">Remove sync</button>
+        </div>
+        <div id="sync-conflict-actions" class="sync-conflict-actions hidden">
+          <div class="warning-box">Both copies changed. Choose which encrypted vault copy should win. The losing copy cannot be merged automatically in Phase 8.</div>
+          <div class="sync-actions">
+            <button id="keep-local-sync" class="secondary-button">Keep local</button>
+            <button id="keep-remote-sync" class="danger-button">Keep remote</button>
+          </div>
+        </div>
       </div>
       <div class="settings-section">
         <h3>Integrity check</h3>
