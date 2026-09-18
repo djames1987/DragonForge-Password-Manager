@@ -4,10 +4,22 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use crate::{Result, VaultError};
+use crate::{MAX_VAULT_FILE_BYTES, Result, VaultError};
 
 pub fn read_file(path: &Path) -> Result<Vec<u8>> {
     recover_if_needed(path)?;
+    let metadata = fs::metadata(path).map_err(|source| VaultError::Io {
+        path: path.to_path_buf(),
+        source,
+    })?;
+    if metadata.len() > MAX_VAULT_FILE_BYTES {
+        return Err(VaultError::ResourceLimit(format!(
+            "vault file is {} bytes; maximum is {} bytes",
+            metadata.len(),
+            MAX_VAULT_FILE_BYTES
+        )));
+    }
+
     fs::read(path).map_err(|source| VaultError::Io {
         path: path.to_path_buf(),
         source,
@@ -15,6 +27,14 @@ pub fn read_file(path: &Path) -> Result<Vec<u8>> {
 }
 
 pub fn atomic_write(path: &Path, bytes: &[u8]) -> Result<()> {
+    let byte_len = u64::try_from(bytes.len()).unwrap_or(u64::MAX);
+    if byte_len > MAX_VAULT_FILE_BYTES {
+        return Err(VaultError::ResourceLimit(format!(
+            "refusing to write {} bytes; maximum is {} bytes",
+            byte_len, MAX_VAULT_FILE_BYTES
+        )));
+    }
+
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|source| VaultError::Io {
             path: parent.to_path_buf(),
@@ -48,18 +68,25 @@ pub fn atomic_write(path: &Path, bytes: &[u8]) -> Result<()> {
             path: path.to_path_buf(),
             source,
         })?;
+        sync_parent(path)?;
     }
 
     match fs::rename(&tmp, path) {
         Ok(()) => {
+            sync_parent(path)?;
             if backup.exists() {
-                let _ = fs::remove_file(&backup);
+                fs::remove_file(&backup).map_err(|source| VaultError::Io {
+                    path: backup.clone(),
+                    source,
+                })?;
+                sync_parent(path)?;
             }
             Ok(())
         }
         Err(source) => {
             if backup.exists() && !path.exists() {
                 let _ = fs::rename(&backup, path);
+                let _ = sync_parent(path);
             }
             Err(VaultError::Io {
                 path: path.to_path_buf(),
@@ -76,11 +103,12 @@ fn recover_if_needed(path: &Path) -> Result<()> {
             path: path.to_path_buf(),
             source,
         })?;
+        sync_parent(path)?;
     }
     Ok(())
 }
 
-fn temporary_path(path: &Path) -> PathBuf {
+pub(crate) fn temporary_path(path: &Path) -> PathBuf {
     path.with_extension(format!(
         "{}.tmp",
         path.extension()
@@ -89,7 +117,7 @@ fn temporary_path(path: &Path) -> PathBuf {
     ))
 }
 
-fn backup_path(path: &Path) -> PathBuf {
+pub(crate) fn backup_path(path: &Path) -> PathBuf {
     path.with_extension(format!(
         "{}.bak",
         path.extension()
@@ -112,4 +140,24 @@ fn secure_create(path: &Path) -> Result<File> {
         path: path.to_path_buf(),
         source,
     })
+}
+
+#[cfg(unix)]
+fn sync_parent(path: &Path) -> Result<()> {
+    let Some(parent) = path.parent() else {
+        return Ok(());
+    };
+    let directory = File::open(parent).map_err(|source| VaultError::Io {
+        path: parent.to_path_buf(),
+        source,
+    })?;
+    directory.sync_all().map_err(|source| VaultError::Io {
+        path: parent.to_path_buf(),
+        source,
+    })
+}
+
+#[cfg(not(unix))]
+fn sync_parent(_path: &Path) -> Result<()> {
+    Ok(())
 }
