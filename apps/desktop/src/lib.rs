@@ -1,17 +1,26 @@
 #![forbid(unsafe_code)]
 
+mod bridge;
 mod commands;
 mod service;
 
+pub use bridge::{
+    BROWSER_PROTOCOL_VERSION, BrowserAction, BrowserBridge, BrowserRequest, BrowserResponse,
+    NATIVE_HOST_NAME, forward_native_request,
+};
 pub use service::{
-    AppStatus, CreateVaultResponse, DesktopError, DesktopService, ItemDraft, ItemDto,
-    ItemSummaryDto,
+    AppStatus, BrowserCredential, BrowserLoginSummary, CreateVaultResponse, DesktopError,
+    DesktopService, ItemDraft, ItemDto, ItemSummaryDto,
 };
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let service = DesktopService::default();
+    let browser_bridge = BrowserBridge::start(service.clone()).ok();
+
     tauri::Builder::default()
-        .manage(DesktopService::default())
+        .manage(service)
+        .manage(browser_bridge)
         .invoke_handler(tauri::generate_handler![
             commands::app_status,
             commands::create_vault,
