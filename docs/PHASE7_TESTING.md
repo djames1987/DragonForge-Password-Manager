@@ -59,7 +59,7 @@ The API suite verifies:
 Start the server:
 
 ```powershell
-$env:DRAGONFORGE_SYNC_ADMIN_TOKEN = "phase7-local-admin-token"
+$env:DRAGONFORGE_SYNC_ADMIN_TOKEN = "phase7-local-admin-token-32bytes-minimum"
 cargo run -p dragonforge-sync-server
 ```
 
