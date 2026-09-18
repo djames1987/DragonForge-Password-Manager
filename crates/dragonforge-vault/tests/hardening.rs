@@ -1,7 +1,7 @@
 use std::fs;
 
 use dragonforge_vault::{
-    MigrationStatus, Vault, VaultError, CURRENT_VAULT_FORMAT_VERSION, inspect_vault_file,
+    CURRENT_VAULT_FORMAT_VERSION, MigrationStatus, Vault, VaultError, inspect_vault_file,
 };
 use tempfile::tempdir;
 
@@ -36,12 +36,8 @@ fn malformed_structure_is_rejected_before_unlock_work() {
     let temp = tempdir().unwrap();
     let path = temp.path().join("mutations.dfvault");
     let (mut vault, secret) = Vault::create(&path, MASTER).unwrap();
-    vault
-        .add_secure_note("one", "first", vec![])
-        .unwrap();
-    vault
-        .add_secure_note("two", "second", vec![])
-        .unwrap();
+    vault.add_secure_note("one", "first", vec![]).unwrap();
+    vault.add_secure_note("two", "second", vec![]).unwrap();
     drop(vault);
 
     let original = load_json(&path);
@@ -122,7 +118,14 @@ fn orphan_temporary_file_is_never_treated_as_a_valid_vault() {
     let tmp = path.with_extension("dfvault.tmp");
     fs::write(&tmp, b"{\"partial\": true").unwrap();
 
-    assert!(Vault::open(&path, MASTER, &dragonforge_vault::AccountSecret::generate().unwrap()).is_err());
+    assert!(
+        Vault::open(
+            &path,
+            MASTER,
+            &dragonforge_vault::AccountSecret::generate().unwrap()
+        )
+        .is_err()
+    );
     assert!(!path.exists());
     assert!(tmp.exists());
 }
@@ -173,11 +176,9 @@ fn repeated_updates_remain_decryptable() {
                 "revision-test".into(),
                 revision % 2 == 0,
                 vec!["updates".into()],
-                dragonforge_vault::VaultItemData::SecureNote(
-                    dragonforge_vault::SecureNoteItem {
-                        notes: format!("version-{revision}"),
-                    },
-                ),
+                dragonforge_vault::VaultItemData::SecureNote(dragonforge_vault::SecureNoteItem {
+                    notes: format!("version-{revision}"),
+                }),
             )
             .unwrap();
     }
