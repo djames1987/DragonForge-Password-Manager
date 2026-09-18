@@ -97,11 +97,7 @@ async fn get_vault(
         HeaderValue::from_static("application/octet-stream"),
     );
     insert_u64_header(response_headers, HEADER_REVISION, stored.revision)?;
-    insert_u64_header(
-        response_headers,
-        HEADER_UPDATED_AT_MS,
-        stored.updated_at_ms,
-    )?;
+    insert_u64_header(response_headers, HEADER_UPDATED_AT_MS, stored.updated_at_ms)?;
     insert_string_header(
         response_headers,
         HEADER_CONTENT_SHA256,
@@ -211,7 +207,11 @@ fn parse_base_revision(headers: &HeaderMap) -> Result<u64, ApiError> {
         .map_err(|_| ApiError::BadRequest("base revision must be an unsigned integer".to_owned()))
 }
 
-fn insert_u64_header(headers: &mut HeaderMap, name: &'static str, value: u64) -> Result<(), ApiError> {
+fn insert_u64_header(
+    headers: &mut HeaderMap,
+    name: &'static str,
+    value: u64,
+) -> Result<(), ApiError> {
     insert_string_header(headers, name, &value.to_string())
 }
 
@@ -220,8 +220,7 @@ fn insert_string_header(
     name: &'static str,
     value: &str,
 ) -> Result<(), ApiError> {
-    let header_value =
-        HeaderValue::from_str(value).map_err(|_| ApiError::Unavailable)?;
+    let header_value = HeaderValue::from_str(value).map_err(|_| ApiError::Unavailable)?;
     headers.insert(name, header_value);
     Ok(())
 }
