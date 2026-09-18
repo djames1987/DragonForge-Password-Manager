@@ -2,7 +2,7 @@
 
 DragonForge Password Manager is a security-first, zero-knowledge password manager project designed for long-term cryptographic agility and post-quantum migration.
 
-> **Development status:** Phase 6 — Browser Extension Foundation
+> **Development status:** Phase 6 — Browser Extension Foundation **COMPLETE**
 
 ## Completed phases
 
@@ -87,6 +87,11 @@ DragonForge Password Manager is a security-first, zero-knowledge password manage
 - Master password, Account Secret, VMK, and item-wrap key never enter the extension.
 - Windows native-host registration scripts for Chrome and Edge.
 - Browser extension packaging script, static/unit tests, and Phase 6 uploadable-log runner.
+- Native-host installer and diagnostics validated on Windows.
+- Real end-to-end credential retrieval and form filling manually verified in Microsoft Edge.
+- Real end-to-end credential retrieval and form filling manually verified in Google Chrome.
+- Exact Chrome/Edge extension-origin allowlisting is validated by the diagnostic script.
+- CI validates the browser PowerShell installer/diagnostic scripts before Windows builds.
 
 The post-quantum implementation uses the pure-Rust RustCrypto `ml-kem` and `ml-dsa` crates rather than the older unmaintained `pqcrypto-*` bindings.
 
