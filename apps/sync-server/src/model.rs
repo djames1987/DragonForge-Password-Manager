@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
+use zeroize::{Zeroize, ZeroizeOnDrop};
 
 pub const SYNC_PROTOCOL_VERSION: u16 = 1;
 pub const MAX_SYNC_BLOB_BYTES: usize = 64 * 1024 * 1024;
@@ -27,9 +28,10 @@ pub struct HealthResponse {
     pub protocol_version: u16,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Serialize, Zeroize, ZeroizeOnDrop)]
 #[serde(rename_all = "camelCase")]
 pub struct AccountResponse {
+    #[zeroize(skip)]
     pub account_id: Uuid,
     pub sync_token: String,
 }
