@@ -33,6 +33,9 @@
 
   function readableError(error) {
     const text = String(error ?? "Unknown error");
+    if (/sync server rejected authentication|unauthorized/i.test(text)) {
+      return "The sync server rejected this device's sync token.";
+    }
     if (/authentication|decrypt|crypto/i.test(text)) {
       return "Unable to unlock or decrypt the vault. Check your master password and Account Secret.";
     }
