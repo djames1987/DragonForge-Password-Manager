@@ -16,11 +16,7 @@ pub trait SyncStore: Send + Sync {
 
     async fn authenticate(&self, token_hash: [u8; 32]) -> Result<Option<Uuid>, StoreError>;
 
-    async fn get_vault(
-        &self,
-        account_id: Uuid,
-        vault_id: Uuid,
-    ) -> Result<StoredVault, StoreError>;
+    async fn get_vault(&self, account_id: Uuid, vault_id: Uuid) -> Result<StoredVault, StoreError>;
 
     async fn put_vault(
         &self,
@@ -67,11 +63,7 @@ impl SyncStore for InMemoryStore {
             .map(|account| account.account_id))
     }
 
-    async fn get_vault(
-        &self,
-        account_id: Uuid,
-        vault_id: Uuid,
-    ) -> Result<StoredVault, StoreError> {
+    async fn get_vault(&self, account_id: Uuid, vault_id: Uuid) -> Result<StoredVault, StoreError> {
         let state = self.inner.lock().map_err(|_| StoreError::Internal)?;
         state
             .vaults
@@ -154,17 +146,20 @@ mod postgres {
     #[async_trait]
     impl SyncStore for PostgresStore {
         async fn create_account(&self, account: AccountRecord) -> Result<(), StoreError> {
-            let result = sqlx::query(
-                "INSERT INTO sync_accounts (account_id, token_hash) VALUES ($1, $2)",
-            )
-            .bind(account.account_id)
-            .bind(account.token_hash.to_vec())
-            .execute(&self.pool)
-            .await;
+            let result =
+                sqlx::query("INSERT INTO sync_accounts (account_id, token_hash) VALUES ($1, $2)")
+                    .bind(account.account_id)
+                    .bind(account.token_hash.to_vec())
+                    .execute(&self.pool)
+                    .await;
 
             match result {
                 Ok(_) => Ok(()),
-                Err(error) if error.as_database_error().is_some_and(|db| db.is_unique_violation()) => {
+                Err(error)
+                    if error
+                        .as_database_error()
+                        .is_some_and(|db| db.is_unique_violation()) =>
+                {
                     Err(StoreError::AccountExists)
                 }
                 Err(_) => Err(StoreError::Internal),
@@ -172,13 +167,12 @@ mod postgres {
         }
 
         async fn authenticate(&self, token_hash: [u8; 32]) -> Result<Option<Uuid>, StoreError> {
-            let row = sqlx::query(
-                "SELECT account_id FROM sync_accounts WHERE token_hash = $1 LIMIT 1",
-            )
-            .bind(token_hash.to_vec())
-            .fetch_optional(&self.pool)
-            .await
-            .map_err(|_| StoreError::Internal)?;
+            let row =
+                sqlx::query("SELECT account_id FROM sync_accounts WHERE token_hash = $1 LIMIT 1")
+                    .bind(token_hash.to_vec())
+                    .fetch_optional(&self.pool)
+                    .await
+                    .map_err(|_| StoreError::Internal)?;
 
             row.map(|row| row.try_get("account_id").map_err(|_| StoreError::Internal))
                 .transpose()
@@ -223,11 +217,9 @@ mod postgres {
 
             match existing {
                 Some(row) => {
-                    let current_i64: i64 = row
-                        .try_get("revision")
-                        .map_err(|_| StoreError::Internal)?;
-                    let current =
-                        u64::try_from(current_i64).map_err(|_| StoreError::Internal)?;
+                    let current_i64: i64 =
+                        row.try_get("revision").map_err(|_| StoreError::Internal)?;
+                    let current = u64::try_from(current_i64).map_err(|_| StoreError::Internal)?;
                     if current != base_revision {
                         return Err(StoreError::Conflict {
                             current_revision: current,
@@ -235,8 +227,7 @@ mod postgres {
                     }
 
                     let next_revision = current.checked_add(1).ok_or(StoreError::Internal)?;
-                    let revision_i64 =
-                        i64::try_from(next_revision).map_err(|_| StoreError::Internal)?;
+                    let revision_i64 = i64::try_from(next_revision).map_err(|_| StoreError::Internal)?;
 
                     sqlx::query(
                         "UPDATE sync_vaults SET revision = $3, content_sha256 = $4,                          ciphertext = $5, updated_at = NOW()                          WHERE account_id = $1 AND vault_id = $2",
@@ -307,8 +298,7 @@ mod postgres {
         let digest: Vec<u8> = row
             .try_get("content_sha256")
             .map_err(|_| StoreError::Internal)?;
-        let content_sha256: [u8; 32] =
-            digest.try_into().map_err(|_| StoreError::Internal)?;
+        let content_sha256: [u8; 32] = digest.try_into().map_err(|_| StoreError::Internal)?;
 
         Ok(StoredVault {
             account_id,
