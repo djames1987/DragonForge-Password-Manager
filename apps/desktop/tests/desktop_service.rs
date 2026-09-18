@@ -113,7 +113,6 @@ fn invalid_item_drafts_are_rejected() {
     assert!(result.is_err());
 }
 
-
 #[test]
 fn browser_search_is_scoped_to_active_site_and_hides_passwords() {
     let temp = tempdir().unwrap();
