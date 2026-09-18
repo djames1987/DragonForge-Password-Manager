@@ -2,7 +2,7 @@
 
 ## Current status
 
-DragonForge Password Manager is under active development through **Phase 7 — Sync Server Foundation**.
+DragonForge Password Manager is under active development through **Phase 8 — Multi-Device Sync**.
 
 The project contains working cryptographic primitives, post-quantum/hybrid components, a hardened persistent local vault, a Tauri desktop application, a Chromium browser-extension bridge verified on Windows with Microsoft Edge and Google Chrome, and a zero-knowledge sync-server foundation. It has **not** received an independent cryptographic or application-security audit and must not yet be trusted with production credentials or other high-value secrets.
 
@@ -62,12 +62,19 @@ The project contains working cryptographic primitives, post-quantum/hybrid compo
 - Remote deployment requires HTTPS/TLS termination; Phase 7 does not include built-in TLS.
 - Account provisioning is disabled unless a server admin token is configured.
 - Server logs must not contain bearer tokens, admin tokens, or synchronized ciphertext bodies.
+- Phase 8 desktop synchronization compares local ciphertext hashes with the last synchronized hash and the server revision before modifying either side.
+- A remote pull structurally validates the encrypted vault, locks the active desktop vault, then atomically replaces the local encrypted file.
+- If both local and remote state changed, automatic synchronization stops and requires an explicit Keep Local or Keep Remote choice.
+- Server revision rollback, same-revision ciphertext mismatch, and disappearance of a previously synchronized remote vault are treated as safety failures rather than normal updates.
+- Non-loopback sync endpoints must use HTTPS. Plain HTTP is accepted only for local development on loopback addresses.
 
 ## Desktop-specific limitations
 
 - Decrypted item values necessarily exist in webview memory while displayed or edited. Locking clears application references but cannot prove physical erasure of every runtime copy.
 - Copying a password or Account Secret to the system clipboard may expose it to other local applications or clipboard-history features. Timed clipboard clearing is not yet implemented.
 - Automatic inactivity lock is not implemented yet.
+- Phase 8 stores the per-vault sync bearer token in a local sidecar file. On Unix the sidecar is created with mode 0600; on Windows it inherits the current user's filesystem ACLs. Hardware/OS-backed secret storage is not implemented yet.
+- A user or malware process with access to the current OS account may be able to read the sync sidecar token and impersonate that device to the sync service.
 - Hardware-backed unlock (Windows Hello/TPM, Keychain/Secure Enclave, etc.) is not yet implemented.
 - The desktop app is not yet code-signed or distributed through a production installer.
 
@@ -84,7 +91,7 @@ The project contains working cryptographic primitives, post-quantum/hybrid compo
 
 ## Known limitations
 
-- The Phase 7 sync protocol does not yet provide rollback-resistant signed multi-device history or automatic conflict merging.
+- Phase 8 does not yet provide rollback-resistant signed multi-device history, device signatures, automatic background synchronization, or field-level conflict merging.
 - An attacker who can replace a valid vault with an older valid copy can still cause local rollback.
 - Filesystem atomicity and durability guarantees still depend on OS/filesystem behavior.
 - Zeroization is defense in depth and cannot guarantee erasure of every historical runtime/compiler copy.
