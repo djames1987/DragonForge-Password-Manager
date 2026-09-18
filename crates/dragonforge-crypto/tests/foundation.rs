@@ -5,26 +5,32 @@ use dragonforge_crypto::{
 };
 
 fn test_kdf() -> Argon2idKdf {
-    Argon2idKdf::new(
-        Argon2idConfig::new(MIN_MEMORY_KIB, 2, 1).expect("valid test KDF parameters"),
-    )
-    .expect("valid KDF")
+    Argon2idKdf::new(Argon2idConfig::new(MIN_MEMORY_KIB, 2, 1).expect("valid test KDF parameters"))
+        .expect("valid KDF")
 }
 
 #[test]
 fn argon2id_is_deterministic_for_same_inputs() {
     let kdf = test_kdf();
     let salt = b"0123456789abcdef";
-    let first = kdf.derive_key(b"correct horse battery staple", salt).unwrap();
-    let second = kdf.derive_key(b"correct horse battery staple", salt).unwrap();
+    let first = kdf
+        .derive_key(b"correct horse battery staple", salt)
+        .unwrap();
+    let second = kdf
+        .derive_key(b"correct horse battery staple", salt)
+        .unwrap();
     assert!(first.ct_eq(&second));
 }
 
 #[test]
 fn argon2id_changes_with_salt() {
     let kdf = test_kdf();
-    let first = kdf.derive_key(b"same password", b"0123456789abcdef").unwrap();
-    let second = kdf.derive_key(b"same password", b"fedcba9876543210").unwrap();
+    let first = kdf
+        .derive_key(b"same password", b"0123456789abcdef")
+        .unwrap();
+    let second = kdf
+        .derive_key(b"same password", b"fedcba9876543210")
+        .unwrap();
     assert!(!first.ct_eq(&second));
 }
 
@@ -47,10 +53,15 @@ fn aes_gcm_round_trip_binds_aad() {
     let key = generate_secret_key(&random).unwrap();
     let cipher = Aes256GcmCipher;
     let aad = b"vault=abc;item=42;schema=1";
-    let envelope = cipher.seal(&random, &key, b"super secret password", aad).unwrap();
+    let envelope = cipher
+        .seal(&random, &key, b"super secret password", aad)
+        .unwrap();
 
     assert_eq!(envelope.suite(), CipherSuite::Aes256GcmV1);
-    assert_eq!(cipher.open(&key, &envelope, aad).unwrap(), b"super secret password");
+    assert_eq!(
+        cipher.open(&key, &envelope, aad).unwrap(),
+        b"super secret password"
+    );
     assert_eq!(
         cipher.open(&key, &envelope, b"vault=abc;item=43;schema=1"),
         Err(CryptoError::DecryptionFailed)
@@ -101,8 +112,12 @@ fn aes_gcm_rejects_unsupported_envelope_version() {
 fn hkdf_domain_separation_produces_distinct_keys() {
     let root = SecretKey::from_bytes([0x42; 32]);
     let deriver = HkdfSha512;
-    let items = deriver.derive_key(&root, None, b"dragonforge/vault/items/v1").unwrap();
-    let files = deriver.derive_key(&root, None, b"dragonforge/vault/files/v1").unwrap();
+    let items = deriver
+        .derive_key(&root, None, b"dragonforge/vault/items/v1")
+        .unwrap();
+    let files = deriver
+        .derive_key(&root, None, b"dragonforge/vault/files/v1")
+        .unwrap();
     assert!(!items.ct_eq(&files));
     assert_eq!(
         deriver.derive_key(&root, None, b""),
