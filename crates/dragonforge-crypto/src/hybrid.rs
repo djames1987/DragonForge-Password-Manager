@@ -53,7 +53,11 @@ impl HybridKemKeyPair {
         &self.public
     }
 
-    pub fn decapsulate(&self, ciphertext: &HybridKemCiphertext, context: &[u8]) -> Result<SecretKey> {
+    pub fn decapsulate(
+        &self,
+        ciphertext: &HybridKemCiphertext,
+        context: &[u8],
+    ) -> Result<SecretKey> {
         if context.is_empty() {
             return Err(CryptoError::EmptyContext);
         }
@@ -65,13 +69,7 @@ impl HybridKemKeyPair {
         }
 
         let pq = self.ml_kem.decapsulate(&ciphertext.ml_kem_768_ciphertext)?;
-        combine_hybrid_secrets(
-            classical.as_bytes(),
-            &pq,
-            &self.public,
-            ciphertext,
-            context,
-        )
+        combine_hybrid_secrets(classical.as_bytes(), &pq, &self.public, ciphertext, context)
     }
 }
 
