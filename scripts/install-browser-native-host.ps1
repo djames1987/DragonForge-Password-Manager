@@ -121,5 +121,12 @@ Write-Host "  $ManifestPath"
 Write-Host "Allowed origins:"
 foreach ($Origin in $AllowedOrigins) { Write-Host "  $Origin" }
 Write-Host ""
-Write-Host "Run .\scripts\test-browser-native-host.ps1 -Browser Edge to verify the registration and desktop bridge."
-Write-Host "Restart the browser if DragonForge was already open in it."
+if (-not [string]::IsNullOrWhiteSpace($ChromeExtensionId)) {
+    Write-Host "Verify Chrome with:"
+    Write-Host "  .\scripts\test-browser-native-host.ps1 -Browser Chrome -ExtensionId $ChromeExtensionId"
+}
+if (-not [string]::IsNullOrWhiteSpace($EdgeExtensionId)) {
+    Write-Host "Verify Edge with:"
+    Write-Host "  .\scripts\test-browser-native-host.ps1 -Browser Edge -ExtensionId $EdgeExtensionId"
+}
+Write-Host "Restart each configured browser if DragonForge was already open in it."
