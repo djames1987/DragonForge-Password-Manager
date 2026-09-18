@@ -16,13 +16,20 @@ crate-type = ["rlib"]
 name = "dragonforge-desktop"
 path = "src/main.rs"
 
+[[bin]]
+name = "dragonforge-native-host"
+path = "src/bin/native_host.rs"
+
 [dependencies]
 dragonforge-vault = { path = "../../crates/dragonforge-vault" }
 hex = "0.4.3"
+rand_core = { version = "0.6.4", features = ["getrandom"] }
 rfd = { version = "0.17.2", default-features = false, features = ["xdg-portal"] }
 serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
 tauri = { version = "2.11.5", features = [] }
 thiserror = "2.0"
+url = "2.5"
 zeroize = { version = "1.8", features = ["zeroize_derive"] }
 
 [build-dependencies]
