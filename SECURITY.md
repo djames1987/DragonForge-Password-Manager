@@ -2,44 +2,46 @@
 
 ## Current status
 
-DragonForge Password Manager is under active development through **Phase 3 — Local Encrypted Vault**.
+DragonForge Password Manager is under active development through **Phase 4 — Secure Storage Architecture / Vault Hardening**.
 
-The project now contains working cryptographic primitives, post-quantum/hybrid key-establishment components, and a persistent local encrypted vault. It has **not** received an independent cryptographic or application-security audit and must not yet be trusted with production credentials or other high-value secrets.
+The project contains working cryptographic primitives, post-quantum/hybrid components, and a persistent local encrypted vault with defensive parsing/storage controls. It has **not** received an independent cryptographic or application-security audit and must not yet be trusted with production credentials or other high-value secrets.
 
 ## Security principles
 
-- Cryptographic primitives come from established RustCrypto/password-hashing crates; DragonForge does not implement AES, Argon2, SHA-2, HKDF, ML-KEM, ML-DSA, or X25519 primitives itself.
+- Cryptographic primitives come from established libraries; DragonForge does not implement AES, Argon2, SHA-2, HKDF, ML-KEM, ML-DSA, or X25519 primitives itself.
 - The master password never directly encrypts vault items.
-- A random Vault Master Key (VMK) is wrapped by an unlock key derived from the password and an external Account Secret.
+- A random VMK is wrapped by an unlock key derived from the password and external Account Secret.
 - The Account Secret is not stored inside the vault file.
-- Each vault item receives a fresh random item key; item payloads are encrypted independently.
-- Item names, usernames, passwords, URLs, notes, and tags are encrypted rather than stored as plaintext metadata.
-- AEAD is required for encrypted data. Unauthenticated encryption is not supported.
-- Fresh nonces are obtained from the operating-system CSPRNG for AES-256-GCM encryption operations.
-- Record identity and revision data are bound through authenticated associated data.
-- Secret key material uses dedicated types and is zeroized on drop where the language/runtime permits.
-- Login passwords and secure-note bodies use zeroizing payload types in memory.
-- Private ML-KEM/ML-DSA/X25519 containers are not general-purpose Serde-serializable.
-- Encrypted envelopes and vault files carry explicit versions for controlled migrations.
-- Vault creation and backup import refuse to silently overwrite existing vault files.
-- Backup credentials and vault integrity are checked before an imported backup is written to its destination.
-- Algorithm fallback or downgrade behavior must be explicit; DragonForge must not silently weaken an existing vault.
-- Logs, error values, and debug output must never contain secret key material, passwords, Account Secrets, or decrypted vault payloads.
+- Each item has an independent random encryption key.
+- Sensitive item metadata remains encrypted.
+- AEAD is mandatory and record identity/revision data is authenticated.
+- Attacker-controlled KDF metadata is bounded before Argon2 execution.
+- Vault file size, item count, ciphertext size, KDF salt size, memory, iteration, and lane counts are bounded.
+- Vault and item identifiers are structurally validated before unlock work.
+- Duplicate IDs, zero revisions, malformed wrapped-key sizes, and unsupported versions are rejected.
+- Revision increments use checked arithmetic.
+- Atomic persistence uses same-directory temporary and backup paths; Unix writes additionally synchronize the parent directory after rename operations.
+- A missing live vault may recover from the last complete backup, but orphan temporary files are never trusted as vaults.
+- Backup imports verify credentials and full vault integrity before creating the destination.
+- Logs and debug output must never expose secret keys, master passwords, Account Secrets, or decrypted vault payloads.
 
 ## Known limitations
 
-- Phase 3 is local-only; there is no hardened sync protocol or rollback-resistant multi-device state log yet.
-- File-system crash recovery is implemented with same-directory temporary/backup replacement, but it is not a substitute for a transactional database or filesystem.
-- Zeroization is defense in depth and cannot guarantee erasure of every historical compiler/runtime copy.
-- A compromised endpoint can read secrets while the user legitimately has the vault unlocked.
-- No independent audit, penetration test, or formal side-channel review has been completed.
-- The current Account Secret storage/user-recovery experience has not yet been implemented in a GUI or hardware-backed secure store.
+- Phase 4 remains local-only; there is no sync protocol or rollback-resistant multi-device state log.
+- An attacker who can replace a valid vault with an older valid copy can still cause local rollback; authenticated remote state/version anchoring is a later-phase concern.
+- JSON parsing necessarily allocates memory before all semantic checks, though Phase 4 caps the input file at 64 MiB.
+- The current format supports inspection/migration dispatch scaffolding, but there is no older DragonForge vault format to migrate yet.
+- Filesystem atomicity and durability guarantees still depend on operating-system/filesystem behavior.
+- Zeroization is defense in depth and cannot guarantee erasure of every historical runtime/compiler copy.
+- A compromised endpoint can read secrets while the vault is legitimately unlocked.
+- No independent audit, penetration test, fuzzing campaign, or formal side-channel review has been completed.
+- The Account Secret recovery/storage experience has not yet been integrated with hardware-backed secure storage.
 
 ## Reporting vulnerabilities
 
-Until a dedicated private security-reporting channel is configured, do not publish exploit details in a public issue. Repository owners should enable GitHub Private Vulnerability Reporting before a public release.
+Until a dedicated private security-reporting channel is configured, do not publish exploit details in a public issue.
 
-When reporting a vulnerability, include the affected commit/version, reproduction steps, expected versus observed behavior, and impact. Do not include real passwords, recovery keys, Account Secrets, or other production secrets.
+When reporting a vulnerability, include the affected commit/version, reproduction steps, expected versus observed behavior, and impact. Do not include real passwords, recovery keys, Account Secrets, or production secrets.
 
 ## Supported versions
 
