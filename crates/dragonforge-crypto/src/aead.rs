@@ -25,7 +25,13 @@ impl AeadCipher for Aes256GcmCipher {
         random.fill_bytes(&mut nonce_bytes)?;
         let nonce = Nonce::from_slice(&nonce_bytes);
         let ciphertext = cipher
-            .encrypt(nonce, Payload { msg: plaintext, aad })
+            .encrypt(
+                nonce,
+                Payload {
+                    msg: plaintext,
+                    aad,
+                },
+            )
             .map_err(|_| CryptoError::EncryptionFailed)?;
 
         Ok(EncryptedEnvelope::from_parts(
@@ -36,12 +42,7 @@ impl AeadCipher for Aes256GcmCipher {
         ))
     }
 
-    fn open(
-        &self,
-        key: &SecretKey,
-        envelope: &EncryptedEnvelope,
-        aad: &[u8],
-    ) -> Result<Vec<u8>> {
+    fn open(&self, key: &SecretKey, envelope: &EncryptedEnvelope, aad: &[u8]) -> Result<Vec<u8>> {
         if envelope.version() != CURRENT_ENVELOPE_VERSION {
             return Err(CryptoError::UnsupportedEnvelopeVersion(envelope.version()));
         }
