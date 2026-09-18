@@ -5,7 +5,7 @@ use std::{
     time::Duration,
 };
 
-use dragonforge_vault::{MAX_VAULT_FILE_BYTES, inspect_vault_file};
+use dragonforge_vault::{MAX_VAULT_FILE_BYTES, validate_encrypted_vault_bytes};
 use reqwest::{
     StatusCode,
     blocking::{Client, Response},
@@ -216,7 +216,7 @@ pub(crate) fn sync(vault_path: &Path, vault_id: &str) -> Result<SyncExecution, S
                     })
                 }
                 (false, true) => {
-                    validate_remote_bytes(&remote.bytes)?;
+                    validate_remote_bytes(&remote.bytes, vault_id)?;
                     Ok(SyncExecution {
                         outcome: SyncOutcome {
                             action: "downloaded".to_owned(),
@@ -270,7 +270,7 @@ pub(crate) fn resolve(
             let remote = fetch_remote(&config, vault_id)?.ok_or_else(|| {
                 SyncError::Transport("remote vault does not exist".to_owned())
             })?;
-            validate_remote_bytes(&remote.bytes)?;
+            validate_remote_bytes(&remote.bytes, vault_id)?;
             Ok(SyncExecution {
                 outcome: SyncOutcome {
                     action: "keptRemote".to_owned(),
@@ -293,9 +293,10 @@ pub(crate) fn resolve(
 
 pub(crate) fn commit_pull(
     vault_path: &Path,
+    vault_id: &str,
     pull: PullPayload,
 ) -> Result<(), SyncError> {
-    validate_remote_bytes(&pull.bytes)?;
+    validate_remote_bytes(&pull.bytes, vault_id)?;
     replace_file_atomically(vault_path, &pull.bytes)?;
     let mut config = load_config(vault_path)?.ok_or(SyncError::NotConfigured)?;
     config.last_revision = pull.revision;
@@ -460,19 +461,15 @@ fn read_response_bytes(mut response: Response) -> Result<Vec<u8>, SyncError> {
     Ok(bytes)
 }
 
-fn validate_remote_bytes(bytes: &[u8]) -> Result<(), SyncError> {
-    let temp_dir = std::env::temp_dir();
-    let temp = temp_dir.join(format!(
-        "dragonforge-sync-validate-{}-{}.dfvault",
-        std::process::id(),
-        sha256_hex(bytes)
-    ));
-    fs::write(&temp, bytes).map_err(|error| SyncError::Io(error.to_string()))?;
-    let result = inspect_vault_file(&temp)
-        .map(|_| ())
-        .map_err(|error| SyncError::InvalidRemoteVault(error.to_string()));
-    let _ = fs::remove_file(temp);
-    result
+fn validate_remote_bytes(bytes: &[u8], expected_vault_id: &str) -> Result<(), SyncError> {
+    let vault_id = validate_encrypted_vault_bytes(bytes)
+        .map_err(|error| SyncError::InvalidRemoteVault(error.to_string()))?;
+    if vault_id != expected_vault_id {
+        return Err(SyncError::InvalidRemoteVault(
+            "remote encrypted vault ID does not match the local vault".to_owned(),
+        ));
+    }
+    Ok(())
 }
 
 fn read_vault_bytes(path: &Path) -> Result<Vec<u8>, SyncError> {
