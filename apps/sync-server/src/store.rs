@@ -221,7 +221,7 @@ mod postgres {
             .await
             .map_err(|_| StoreError::Internal)?;
 
-            let next_revision = match existing {
+            match existing {
                 Some(row) => {
                     let current_i64: i64 = row
                         .try_get("revision")
@@ -233,30 +233,58 @@ mod postgres {
                             current_revision: current,
                         });
                     }
-                    current.checked_add(1).ok_or(StoreError::Internal)?
+
+                    let next_revision = current.checked_add(1).ok_or(StoreError::Internal)?;
+                    let revision_i64 =
+                        i64::try_from(next_revision).map_err(|_| StoreError::Internal)?;
+
+                    sqlx::query(
+                        "UPDATE sync_vaults SET revision = $3, content_sha256 = $4,                          ciphertext = $5, updated_at = NOW()                          WHERE account_id = $1 AND vault_id = $2",
+                    )
+                    .bind(account_id)
+                    .bind(vault_id)
+                    .bind(revision_i64)
+                    .bind(content_sha256.to_vec())
+                    .bind(ciphertext)
+                    .execute(&mut *transaction)
+                    .await
+                    .map_err(|_| StoreError::Internal)?;
                 }
-                None if base_revision == 0 => 1,
+                None if base_revision == 0 => {
+                    let inserted = sqlx::query(
+                        "INSERT INTO sync_vaults                          (account_id, vault_id, revision, content_sha256, ciphertext, updated_at)                          VALUES ($1, $2, 1, $3, $4, NOW())                          ON CONFLICT (account_id, vault_id) DO NOTHING",
+                    )
+                    .bind(account_id)
+                    .bind(vault_id)
+                    .bind(content_sha256.to_vec())
+                    .bind(ciphertext)
+                    .execute(&mut *transaction)
+                    .await
+                    .map_err(|_| StoreError::Internal)?;
+
+                    if inserted.rows_affected() == 0 {
+                        let current_row = sqlx::query(
+                            "SELECT revision FROM sync_vaults                              WHERE account_id = $1 AND vault_id = $2",
+                        )
+                        .bind(account_id)
+                        .bind(vault_id)
+                        .fetch_one(&mut *transaction)
+                        .await
+                        .map_err(|_| StoreError::Internal)?;
+                        let current_i64: i64 = current_row
+                            .try_get("revision")
+                            .map_err(|_| StoreError::Internal)?;
+                        let current_revision =
+                            u64::try_from(current_i64).map_err(|_| StoreError::Internal)?;
+                        return Err(StoreError::Conflict { current_revision });
+                    }
+                }
                 None => {
                     return Err(StoreError::Conflict {
                         current_revision: 0,
                     });
                 }
-            };
-
-            let revision_i64 =
-                i64::try_from(next_revision).map_err(|_| StoreError::Internal)?;
-
-            sqlx::query(
-                "INSERT INTO sync_vaults                  (account_id, vault_id, revision, content_sha256, ciphertext, updated_at)                  VALUES ($1, $2, $3, $4, $5, NOW())                  ON CONFLICT (account_id, vault_id) DO UPDATE SET                  revision = EXCLUDED.revision,                  content_sha256 = EXCLUDED.content_sha256,                  ciphertext = EXCLUDED.ciphertext,                  updated_at = NOW()",
-            )
-            .bind(account_id)
-            .bind(vault_id)
-            .bind(revision_i64)
-            .bind(content_sha256.to_vec())
-            .bind(ciphertext)
-            .execute(&mut *transaction)
-            .await
-            .map_err(|_| StoreError::Internal)?;
+            }
 
             transaction
                 .commit()
