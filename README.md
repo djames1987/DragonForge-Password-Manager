@@ -2,7 +2,7 @@
 
 DragonForge Password Manager is a security-first, zero-knowledge password manager project designed for long-term cryptographic agility and post-quantum migration.
 
-> **Development status:** Phase 6 — Browser Extension Foundation **COMPLETE**
+> **Development status:** Phase 7 — Sync Server Foundation
 
 ## Completed phases
 
@@ -93,6 +93,26 @@ DragonForge Password Manager is a security-first, zero-knowledge password manage
 - Exact Chrome/Edge extension-origin allowlisting is validated by the diagnostic script.
 - CI validates the browser PowerShell installer/diagnostic scripts before Windows builds.
 
+### Phase 7 — Sync Server Foundation
+
+- Dedicated Rust sync-server application.
+- Zero-knowledge server boundary: opaque encrypted vault bytes only.
+- Separate random 256-bit sync authentication token; never derived from the master password.
+- Server stores only token digests, account/vault identifiers, revision metadata, blob fingerprints, timestamps, and opaque ciphertext.
+- Versioned REST API under `/v1`.
+- Admin-gated development account provisioning.
+- Exact account isolation between synchronized vault objects.
+- Optimistic concurrency using base revisions and HTTP 409 conflicts.
+- Monotonic server revisions.
+- 64 MiB encrypted sync-payload limit.
+- In-memory store for deterministic tests/development.
+- PostgreSQL persistence implementation and checked-in migration.
+- PostgreSQL row locking for atomic revision compare/update.
+- Loopback-only default bind.
+- Deployment documentation requiring HTTPS/TLS termination for remote use.
+- Phase 7 API integration tests and uploadable Windows verification runner.
+- CI compiles/tests the sync server with PostgreSQL support on Linux and Windows.
+
 The post-quantum implementation uses the pure-Rust RustCrypto `ml-kem` and `ml-dsa` crates rather than the older unmaintained `pqcrypto-*` bindings.
 
 ## Workspace
@@ -104,10 +124,14 @@ The post-quantum implementation uses the pure-Rust RustCrypto `ml-kem` and `ml-d
 │   │   ├── src/
 │   │   ├── tests/
 │   │   └── ui/
-│   └── browser-extension/
+│   ├── browser-extension/
+│   │   ├── src/
+│   │   ├── tests/
+│   │   └── ui/
+│   └── sync-server/
+│       ├── migrations/
 │       ├── src/
-│       ├── tests/
-│       └── ui/
+│       └── tests/
 ├── crates/
 │   ├── dragonforge-crypto/
 │   └── dragonforge-vault/
@@ -120,6 +144,8 @@ The post-quantum implementation uses the pure-Rust RustCrypto `ml-kem` and `ml-d
 │   ├── PHASE5_TESTING.md
 │   ├── PHASE6_BROWSER.md
 │   ├── PHASE6_TESTING.md
+│   ├── PHASE7_SYNC_SERVER.md
+│   ├── PHASE7_TESTING.md
 │   └── VAULT_FORMAT.md
 ├── scripts/
 │   ├── run-phase4-tests.cmd
@@ -214,3 +240,40 @@ test-logs\dragonforge-phase6-YYYYMMDD-HHMMSS.log.sha256
 ```
 
 See [docs/PHASE6_TESTING.md](docs/PHASE6_TESTING.md).
+
+
+## Run the Phase 7 sync server
+
+Development/in-memory mode:
+
+```powershell
+$env:DRAGONFORGE_SYNC_ADMIN_TOKEN = "use-a-long-random-development-token"
+cargo run -p dragonforge-sync-server
+```
+
+PostgreSQL-backed mode:
+
+```powershell
+$env:DRAGONFORGE_SYNC_ADMIN_TOKEN = "<long-random-admin-token>"
+$env:DRAGONFORGE_SYNC_DATABASE_URL = "postgres://user:password@127.0.0.1/dragonforge"
+cargo run -p dragonforge-sync-server --features postgres
+```
+
+The server binds to `127.0.0.1:8787` by default. Remote deployment requires HTTPS/TLS termination.
+
+See [docs/PHASE7_SYNC_SERVER.md](docs/PHASE7_SYNC_SERVER.md).
+
+## Automated Phase 7 verification
+
+```powershell
+.\scripts\run-phase7-tests.ps1
+```
+
+The runner creates:
+
+```text
+test-logs\dragonforge-phase7-YYYYMMDD-HHMMSS.log
+test-logs\dragonforge-phase7-YYYYMMDD-HHMMSS.log.sha256
+```
+
+See [docs/PHASE7_TESTING.md](docs/PHASE7_TESTING.md).
