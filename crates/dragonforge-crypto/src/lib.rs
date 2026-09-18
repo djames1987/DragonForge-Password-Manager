@@ -32,8 +32,8 @@ pub use pq_kem::{
     MlKem768KeyPair, MlKem768PublicKey, ml_kem_768_encapsulate,
 };
 pub use pq_sign::{
-    ML_DSA_65_PRIVATE_SEED_LEN, ML_DSA_65_PUBLIC_KEY_LEN, ML_DSA_65_SIGNATURE_LEN,
-    MlDsa65KeyPair, MlDsa65VerifyingKey,
+    ML_DSA_65_PRIVATE_SEED_LEN, ML_DSA_65_PUBLIC_KEY_LEN, ML_DSA_65_SIGNATURE_LEN, MlDsa65KeyPair,
+    MlDsa65VerifyingKey,
 };
 pub use random::{OsRandom, generate_salt, generate_secret_key};
 pub use traits::{AeadCipher, KeyDeriver, PasswordKdf, RandomSource};
