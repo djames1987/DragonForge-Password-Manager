@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "apps/desktop",
+    "apps/sync-server",
     "crates/dragonforge-crypto",
     "crates/dragonforge-vault",
 ]
