@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/dragonforge-crypto"]
+members = ["crates/dragonforge-crypto", "crates/dragonforge-vault"]
 resolver = "2"
 
 [workspace.package]
