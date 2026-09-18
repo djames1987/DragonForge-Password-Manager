@@ -1,0 +1,25 @@
+[package]
+name = "dragonforge-crypto"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+publish = false
+description = "Cryptographic foundation for DragonForge Password Manager"
+
+[dependencies]
+aes-gcm = "0.10.3"
+argon2 = "0.5.3"
+hkdf = "0.12.4"
+rand_core = { version = "0.6.4", features = ["getrandom"] }
+serde = { version = "1.0", features = ["derive"] }
+sha2 = "0.10.8"
+subtle = "2.6.1"
+thiserror = "2.0"
+zeroize = { version = "1.8", features = ["zeroize_derive"] }
+
+[dev-dependencies]
+serde_json = "1.0"
+
+[lints]
+workspace = true
