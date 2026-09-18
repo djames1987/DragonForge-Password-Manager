@@ -1,0 +1,338 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="dark">
+  <title>DragonForge Password Manager</title>
+  <link rel="stylesheet" href="app.css">
+</head>
+<body>
+  <div id="toast-region" class="toast-region" aria-live="polite"></div>
+
+  <section id="welcome-view" class="welcome-view">
+    <div class="welcome-glow welcome-glow-a"></div>
+    <div class="welcome-glow welcome-glow-b"></div>
+    <div class="welcome-card">
+      <div class="brand brand-large">
+        <div class="brand-mark" aria-hidden="true">DF</div>
+        <div>
+          <div class="brand-name">DragonForge</div>
+          <div class="brand-subtitle">Password Manager</div>
+        </div>
+      </div>
+
+      <div class="security-pill">
+        <span class="security-dot"></span>
+        Local-first encrypted vault
+      </div>
+
+      <h1>Your passwords stay yours.</h1>
+      <p class="welcome-copy">
+        A security-first desktop vault built around local encryption, an external Account Secret,
+        and a hardened Rust core.
+      </p>
+
+      <div class="welcome-actions">
+        <button id="show-create" class="primary-button large-button">
+          <span class="button-icon">＋</span>
+          Create a new vault
+        </button>
+        <button id="show-unlock" class="secondary-button large-button">
+          <span class="button-icon">↗</span>
+          Open an existing vault
+        </button>
+      </div>
+
+      <div id="create-panel" class="auth-panel hidden">
+        <div class="panel-heading">
+          <div>
+            <h2>Create vault</h2>
+            <p>Choose a local vault file and a strong master password.</p>
+          </div>
+          <button class="icon-button auth-close" aria-label="Close">×</button>
+        </div>
+        <label class="field">
+          <span>Vault file</span>
+          <div class="field-row">
+            <input id="create-path" type="text" readonly placeholder="Choose where to save your vault">
+            <button id="create-browse" class="secondary-button compact">Browse</button>
+          </div>
+        </label>
+        <label class="field">
+          <span>Master password</span>
+          <input id="create-password" type="password" autocomplete="new-password" placeholder="Use a long, unique password">
+        </label>
+        <label class="field">
+          <span>Confirm master password</span>
+          <input id="create-password-confirm" type="password" autocomplete="new-password" placeholder="Type it again">
+        </label>
+        <div class="form-hint">DragonForge will generate a separate 256-bit Account Secret after creation.</div>
+        <button id="create-submit" class="primary-button full-width">Create encrypted vault</button>
+      </div>
+
+      <div id="unlock-panel" class="auth-panel hidden">
+        <div class="panel-heading">
+          <div>
+            <h2>Unlock vault</h2>
+            <p>Your master password and Account Secret are both required.</p>
+          </div>
+          <button class="icon-button auth-close" aria-label="Close">×</button>
+        </div>
+        <label class="field">
+          <span>Vault file</span>
+          <div class="field-row">
+            <input id="unlock-path" type="text" readonly placeholder="Select a .dfvault file">
+            <button id="unlock-browse" class="secondary-button compact">Browse</button>
+          </div>
+        </label>
+        <label class="field">
+          <span>Master password</span>
+          <input id="unlock-password" type="password" autocomplete="current-password" placeholder="Enter your master password">
+        </label>
+        <label class="field">
+          <span>Account Secret</span>
+          <textarea id="unlock-secret" rows="2" spellcheck="false" autocomplete="off" placeholder="64-character Account Secret"></textarea>
+        </label>
+        <button id="unlock-submit" class="primary-button full-width">Unlock vault</button>
+      </div>
+
+      <div class="welcome-footer">
+        <span>Zero-knowledge architecture</span>
+        <span>•</span>
+        <span>No cloud account required</span>
+        <span>•</span>
+        <span>Phase 5 desktop foundation</span>
+      </div>
+    </div>
+  </section>
+
+  <main id="vault-view" class="vault-view hidden">
+    <aside class="sidebar">
+      <div class="brand sidebar-brand">
+        <div class="brand-mark small">DF</div>
+        <div>
+          <div class="brand-name">DragonForge</div>
+          <div class="brand-subtitle">Vault</div>
+        </div>
+      </div>
+
+      <button id="new-login" class="primary-button full-width sidebar-new">＋ New login</button>
+
+      <nav class="nav-list" aria-label="Vault filters">
+        <button class="nav-item active" data-filter="all"><span>▦</span>All items <span id="all-count" class="nav-count">0</span></button>
+        <button class="nav-item" data-filter="favorites"><span>★</span>Favorites</button>
+        <button class="nav-item" data-filter="login"><span>◉</span>Logins</button>
+        <button class="nav-item" data-filter="secure_note"><span>▤</span>Secure notes</button>
+      </nav>
+
+      <div class="sidebar-section-label">Tools</div>
+      <nav class="nav-list">
+        <button id="new-note" class="nav-item"><span>＋</span>New secure note</button>
+        <button id="verify-action" class="nav-item"><span>✓</span>Verify vault</button>
+        <button id="backup-action" class="nav-item"><span>⇩</span>Encrypted backup</button>
+        <button id="settings-action" class="nav-item"><span>⚙</span>Security settings</button>
+      </nav>
+
+      <div class="sidebar-bottom">
+        <div class="vault-health">
+          <div class="health-icon">✓</div>
+          <div>
+            <strong>Vault unlocked</strong>
+            <span>Encrypted locally</span>
+          </div>
+        </div>
+        <button id="lock-action" class="ghost-button full-width">Lock vault</button>
+      </div>
+    </aside>
+
+    <section class="items-column">
+      <header class="items-header">
+        <div>
+          <h2 id="list-title">All items</h2>
+          <p id="vault-location" class="muted truncate"></p>
+        </div>
+        <button id="quick-add" class="icon-button prominent" aria-label="Add item">＋</button>
+      </header>
+
+      <div class="search-wrap">
+        <span class="search-icon">⌕</span>
+        <input id="search-input" type="search" autocomplete="off" placeholder="Search your vault">
+        <kbd>Ctrl K</kbd>
+      </div>
+
+      <div id="item-list" class="item-list" role="list"></div>
+
+      <div id="empty-list" class="empty-state hidden">
+        <div class="empty-icon">◇</div>
+        <h3>No items here yet</h3>
+        <p>Add your first login or secure note.</p>
+        <button id="empty-add" class="primary-button">Add an item</button>
+      </div>
+    </section>
+
+    <section id="detail-panel" class="detail-panel">
+      <div id="detail-empty" class="detail-empty">
+        <div class="detail-empty-icon">⌘</div>
+        <h2>Select an item</h2>
+        <p>Choose something from your vault to view its encrypted details.</p>
+      </div>
+
+      <div id="detail-content" class="detail-content hidden">
+        <header class="detail-header">
+          <div id="detail-avatar" class="item-avatar large-avatar">A</div>
+          <div class="detail-heading-text">
+            <div class="eyebrow" id="detail-kind">Login</div>
+            <h1 id="detail-name"></h1>
+            <div id="detail-tags" class="tag-row"></div>
+          </div>
+          <div class="detail-actions">
+            <button id="favorite-action" class="icon-button" title="Favorite">☆</button>
+            <button id="edit-action" class="secondary-button compact">Edit</button>
+            <button id="delete-action" class="danger-button compact">Delete</button>
+          </div>
+        </header>
+
+        <div id="login-detail-fields" class="detail-fields">
+          <div class="detail-field">
+            <span class="detail-label">Username</span>
+            <div class="detail-value-row"><span id="detail-username" class="detail-value"></span><button class="copy-button" data-copy="username">Copy</button></div>
+          </div>
+          <div class="detail-field">
+            <span class="detail-label">Password</span>
+            <div class="detail-value-row"><span id="detail-password" class="detail-value password-value">••••••••••••••••</span><button id="reveal-password" class="copy-button">Reveal</button><button class="copy-button" data-copy="password">Copy</button></div>
+          </div>
+          <div class="detail-field">
+            <span class="detail-label">Website</span>
+            <div class="detail-value-row"><span id="detail-url" class="detail-value"></span><button class="copy-button" data-copy="url">Copy</button></div>
+          </div>
+        </div>
+
+        <div class="detail-field notes-field">
+          <span class="detail-label">Notes</span>
+          <div id="detail-notes" class="notes-value"></div>
+        </div>
+
+        <div class="detail-meta">
+          <span id="detail-created"></span>
+          <span id="detail-updated"></span>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <div id="item-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="item-modal-title">
+    <div class="modal-card item-modal-card">
+      <div class="modal-header">
+        <div>
+          <div class="eyebrow">Vault item</div>
+          <h2 id="item-modal-title">New login</h2>
+        </div>
+        <button class="icon-button modal-close" data-modal="item-modal">×</button>
+      </div>
+
+      <form id="item-form">
+        <input id="item-id" type="hidden">
+        <div class="segmented-control" role="group" aria-label="Item type">
+          <button type="button" class="segment active" data-kind="login">Login</button>
+          <button type="button" class="segment" data-kind="secure_note">Secure note</button>
+        </div>
+
+        <label class="field">
+          <span>Name</span>
+          <input id="item-name" required maxlength="160" autocomplete="off" placeholder="e.g. GitHub">
+        </label>
+
+        <div id="login-fields">
+          <label class="field">
+            <span>Username or email</span>
+            <input id="item-username" autocomplete="off" placeholder="name@example.com">
+          </label>
+          <label class="field">
+            <span>Password</span>
+            <div class="field-row">
+              <input id="item-password" type="password" autocomplete="new-password" placeholder="Password">
+              <button id="generate-password" type="button" class="secondary-button compact">Generate</button>
+            </div>
+          </label>
+          <label class="field">
+            <span>Website</span>
+            <input id="item-url" type="url" autocomplete="off" placeholder="https://example.com">
+          </label>
+        </div>
+
+        <label class="field">
+          <span>Tags <span class="muted">(comma separated)</span></span>
+          <input id="item-tags" autocomplete="off" placeholder="work, email">
+        </label>
+
+        <label class="field">
+          <span>Notes</span>
+          <textarea id="item-notes" rows="5" placeholder="Private notes"></textarea>
+        </label>
+
+        <label class="check-row">
+          <input id="item-favorite" type="checkbox">
+          <span>Mark as favorite</span>
+        </label>
+
+        <div class="modal-footer">
+          <button type="button" class="secondary-button modal-close" data-modal="item-modal">Cancel</button>
+          <button id="save-item" type="submit" class="primary-button">Save item</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div id="recovery-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true">
+    <div class="modal-card recovery-card">
+      <div class="recovery-icon">!</div>
+      <div class="eyebrow">One-time recovery step</div>
+      <h2>Save your Account Secret</h2>
+      <p>
+        DragonForge does not store this secret inside your vault. You need it together with your master password
+        to unlock the vault.
+      </p>
+      <div class="secret-box">
+        <code id="recovery-secret"></code>
+        <button id="copy-recovery" class="secondary-button compact">Copy</button>
+      </div>
+      <div class="warning-box">
+        Losing every copy of this Account Secret makes the vault unrecoverable. Store it somewhere separate from the vault file.
+      </div>
+      <label class="check-row recovery-confirm">
+        <input id="recovery-saved" type="checkbox">
+        <span>I have stored my Account Secret somewhere safe.</span>
+      </label>
+      <button id="recovery-continue" class="primary-button full-width" disabled>Continue to my vault</button>
+    </div>
+  </div>
+
+  <div id="settings-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div>
+          <div class="eyebrow">Security</div>
+          <h2>Vault settings</h2>
+        </div>
+        <button class="icon-button modal-close" data-modal="settings-modal">×</button>
+      </div>
+      <div class="settings-section">
+        <h3>Change master password</h3>
+        <p class="muted">This rewraps the Vault Master Key; your item ciphertext does not need to be rewritten.</p>
+        <label class="field"><span>New master password</span><input id="settings-password" type="password" autocomplete="new-password"></label>
+        <label class="field"><span>Confirm new password</span><input id="settings-password-confirm" type="password" autocomplete="new-password"></label>
+        <label class="field"><span>Account Secret</span><textarea id="settings-secret" rows="2" spellcheck="false"></textarea></label>
+        <button id="change-password" class="primary-button">Change master password</button>
+      </div>
+      <div class="settings-section">
+        <h3>Integrity check</h3>
+        <p class="muted">Decrypt and authenticate every record in the vault.</p>
+        <button id="settings-verify" class="secondary-button">Verify entire vault</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
