@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>DragonForge</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <main class="shell">
+    <header class="header">
+      <div class="brand-mark">DF</div>
+      <div class="brand-copy">
+        <strong>DragonForge</strong>
+        <span id="site-label">Password Manager</span>
+      </div>
+      <div id="status-dot" class="status-dot" title="Connection status"></div>
+    </header>
+
+    <section id="offline-view" class="state-card hidden">
+      <div class="state-icon">◇</div>
+      <h1>Desktop app unavailable</h1>
+      <p>Start DragonForge Password Manager, then reopen this extension.</p>
+      <button id="retry-button" class="primary">Retry connection</button>
+    </section>
+
+    <section id="locked-view" class="state-card hidden">
+      <div class="state-icon lock-icon">⌁</div>
+      <h1>Vault is locked</h1>
+      <p>Unlock the DragonForge desktop app. Your master password and Account Secret never enter the browser extension.</p>
+      <button id="locked-retry" class="primary">I unlocked it — retry</button>
+    </section>
+
+    <section id="unsupported-view" class="state-card hidden">
+      <div class="state-icon">↗</div>
+      <h1>Open a website</h1>
+      <p>DragonForge fills credentials only on normal HTTP or HTTPS pages after you explicitly select a login.</p>
+    </section>
+
+    <section id="vault-view" class="hidden">
+      <div class="search-wrap">
+        <span class="search-icon">⌕</span>
+        <input id="search-input" type="search" autocomplete="off" placeholder="Filter matching logins">
+      </div>
+      <div class="section-header">
+        <span>Matching logins</span>
+        <span id="result-count" class="count">0</span>
+      </div>
+      <div id="results" class="results"></div>
+      <div id="empty-results" class="empty hidden">
+        <div class="empty-glyph">◇</div>
+        <strong>No login for this site</strong>
+        <span>Add one in the DragonForge desktop app using this website URL.</span>
+      </div>
+    </section>
+
+    <footer>
+      <span>Passwords are requested only when you click Fill.</span>
+    </footer>
+  </main>
+  <script type="module" src="popup.js"></script>
+</body>
+</html>
