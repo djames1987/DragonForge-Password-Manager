@@ -31,7 +31,7 @@ if (-not $SkipBuild) {
 }
 
 $SourceExe = Join-Path $RepoRoot "target\release\dragonforge-native-host.exe"
-if (-not (Test-Path $SourceExe)) {
+if (-not (Test-Path -LiteralPath $SourceExe)) {
     throw "Native host binary was not found at $SourceExe"
 }
 
@@ -40,10 +40,10 @@ New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
 
 $HostExe = Join-Path $InstallDir "dragonforge-native-host.exe"
 $ManifestPath = Join-Path $InstallDir "com.dragonforge.passwordmanager.json"
-Copy-Item -Force $SourceExe $HostExe
+Copy-Item -Force -LiteralPath $SourceExe -Destination $HostExe
 
 $AllowedOrigins = @()
-if (Test-Path $ManifestPath) {
+if (Test-Path -LiteralPath $ManifestPath) {
     try {
         $ExistingManifest = Get-Content -Raw -LiteralPath $ManifestPath | ConvertFrom-Json
         if ($null -ne $ExistingManifest.allowed_origins) {
@@ -54,46 +54,23 @@ if (Test-Path $ManifestPath) {
         Write-Warning "Existing DragonForge native host manifest could not be read; it will be replaced."
     }
 }
+
 if (-not [string]::IsNullOrWhiteSpace($ChromeExtensionId)) {
     $AllowedOrigins += "chrome-extension://$ChromeExtensionId/"
 }
 if (-not [string]::IsNullOrWhiteSpace($EdgeExtensionId)) {
     $AllowedOrigins += "chrome-extension://$EdgeExtensionId/"
 }
-$AllowedOrigins = @($AllowedOrigins | Where-Object { $_ -match '^chrome-extension://[a-p]{32}/
-$Manifest = [ordered]@{
-    name = "com.dragonforge.passwordmanager"
-    description = "DragonForge Password Manager native browser bridge"
-    path = $HostExe
-    type = "stdio"
-    allowed_origins = $AllowedOrigins
-}
-$ManifestJson = $Manifest | ConvertTo-Json -Depth 4
-$Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
-[System.IO.File]::WriteAllText($ManifestPath, $ManifestJson, $Utf8NoBom)
 
-if (-not [string]::IsNullOrWhiteSpace($ChromeExtensionId)) {
-    $ChromeKey = "HKCU:\Software\Google\Chrome\NativeMessagingHosts\com.dragonforge.passwordmanager"
-    New-Item -Force -Path $ChromeKey | Out-Null
-    Set-Item -Path $ChromeKey -Value $ManifestPath
-    Write-Host "Registered DragonForge native messaging for Chrome: $ChromeExtensionId"
-}
+$AllowedOrigins = @(
+    $AllowedOrigins |
+        Where-Object { $_ -match '^chrome-extension://[a-p]{32}/$' } |
+        Select-Object -Unique
+)
 
-if (-not [string]::IsNullOrWhiteSpace($EdgeExtensionId)) {
-    $EdgeKey = "HKCU:\Software\Microsoft\Edge\NativeMessagingHosts\com.dragonforge.passwordmanager"
-    New-Item -Force -Path $EdgeKey | Out-Null
-    Set-Item -Path $EdgeKey -Value $ManifestPath
-    Write-Host "Registered DragonForge native messaging for Edge: $EdgeExtensionId"
+if ($AllowedOrigins.Count -eq 0) {
+    throw "No valid browser extension origins were available for the native host manifest."
 }
-
-Write-Host ""
-Write-Host "Native host installed:"
-Write-Host "  $HostExe"
-Write-Host "Manifest:"
-Write-Host "  $ManifestPath"
-Write-Host ""
-Write-Host "Restart the browser if DragonForge was already open in it."
- } | Select-Object -Unique)
 
 $Manifest = [ordered]@{
     name = "com.dragonforge.passwordmanager"
@@ -102,14 +79,28 @@ $Manifest = [ordered]@{
     type = "stdio"
     allowed_origins = $AllowedOrigins
 }
+
 $ManifestJson = $Manifest | ConvertTo-Json -Depth 4
 $Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 [System.IO.File]::WriteAllText($ManifestPath, $ManifestJson, $Utf8NoBom)
+
+$WrittenManifest = Get-Content -Raw -LiteralPath $ManifestPath | ConvertFrom-Json
+if ($WrittenManifest.name -ne "com.dragonforge.passwordmanager") {
+    throw "Native host manifest validation failed."
+}
+if ($WrittenManifest.type -ne "stdio") {
+    throw "Native host manifest has an invalid communication type."
+}
+if (-not (Test-Path -LiteralPath $WrittenManifest.path)) {
+    throw "Native host manifest points to a missing executable: $($WrittenManifest.path)"
+}
 
 if (-not [string]::IsNullOrWhiteSpace($ChromeExtensionId)) {
     $ChromeKey = "HKCU:\Software\Google\Chrome\NativeMessagingHosts\com.dragonforge.passwordmanager"
     New-Item -Force -Path $ChromeKey | Out-Null
     Set-Item -Path $ChromeKey -Value $ManifestPath
+    $Registered = (Get-Item -LiteralPath $ChromeKey).GetValue("")
+    if ($Registered -ne $ManifestPath) { throw "Chrome native messaging registry verification failed." }
     Write-Host "Registered DragonForge native messaging for Chrome: $ChromeExtensionId"
 }
 
@@ -117,6 +108,8 @@ if (-not [string]::IsNullOrWhiteSpace($EdgeExtensionId)) {
     $EdgeKey = "HKCU:\Software\Microsoft\Edge\NativeMessagingHosts\com.dragonforge.passwordmanager"
     New-Item -Force -Path $EdgeKey | Out-Null
     Set-Item -Path $EdgeKey -Value $ManifestPath
+    $Registered = (Get-Item -LiteralPath $EdgeKey).GetValue("")
+    if ($Registered -ne $ManifestPath) { throw "Edge native messaging registry verification failed." }
     Write-Host "Registered DragonForge native messaging for Edge: $EdgeExtensionId"
 }
 
@@ -125,5 +118,8 @@ Write-Host "Native host installed:"
 Write-Host "  $HostExe"
 Write-Host "Manifest:"
 Write-Host "  $ManifestPath"
+Write-Host "Allowed origins:"
+foreach ($Origin in $AllowedOrigins) { Write-Host "  $Origin" }
 Write-Host ""
+Write-Host "Run .\scripts\test-browser-native-host.ps1 -Browser Edge to verify the registration and desktop bridge."
 Write-Host "Restart the browser if DragonForge was already open in it."
