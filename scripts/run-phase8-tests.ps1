@@ -141,10 +141,10 @@ try {
     }
 
     $Succeeded = $true
-    Write-Log "PHASE 7 AUTOMATED VERIFICATION: PASS"
+    Write-Log "PHASE 8 AUTOMATED VERIFICATION: PASS"
 }
 catch {
-    Write-Log "PHASE 7 AUTOMATED VERIFICATION: FAIL"
+    Write-Log "PHASE 8 AUTOMATED VERIFICATION: FAIL"
     Write-Log "ERROR: $($_.Exception.Message)"
 }
 finally {
