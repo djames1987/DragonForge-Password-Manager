@@ -5,9 +5,9 @@ use std::{
 };
 
 use dragonforge_crypto::{
-    AeadCipher, Aes256GcmCipher, Argon2idConfig, Argon2idKdf, EncryptedEnvelope, HkdfSha512,
-    KeyDeriver, OsRandom, PasswordKdf, RandomSource, SecretKey, CURRENT_ENVELOPE_VERSION,
-    MIN_SALT_LEN, generate_salt, generate_secret_key, unwrap_key, wrap_key,
+    AeadCipher, Aes256GcmCipher, Argon2idConfig, Argon2idKdf, CURRENT_ENVELOPE_VERSION,
+    EncryptedEnvelope, HkdfSha512, KeyDeriver, MIN_SALT_LEN, OsRandom, PasswordKdf, RandomSource,
+    SecretKey, generate_salt, generate_secret_key, unwrap_key, wrap_key,
 };
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -15,8 +15,8 @@ use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 
 use crate::{
     CURRENT_VAULT_FORMAT_VERSION, LoginItem, MAX_ITEM_CIPHERTEXT_BYTES, MAX_KDF_ITERATIONS,
-    MAX_KDF_LANES, MAX_KDF_MEMORY_KIB, MAX_KDF_SALT_BYTES, MAX_VAULT_ITEMS,
-    Result, SecureNoteItem, VaultError, VaultItem, VaultItemData, VaultItemSummary,
+    MAX_KDF_LANES, MAX_KDF_MEMORY_KIB, MAX_KDF_SALT_BYTES, MAX_VAULT_ITEMS, Result, SecureNoteItem,
+    VaultError, VaultItem, VaultItemData, VaultItemSummary,
     limits::{MIN_AEAD_CIPHERTEXT_BYTES, WRAPPED_256_BIT_KEY_CIPHERTEXT_BYTES},
     storage::{atomic_write, read_file},
 };
@@ -562,14 +562,12 @@ fn unix_time() -> u64 {
         .as_secs()
 }
 
-
 fn validate_vault_file(file: &VaultFile) -> Result<()> {
     if file.version != CURRENT_VAULT_FORMAT_VERSION {
         return Err(VaultError::UnsupportedFormatVersion(file.version));
     }
-    Uuid::parse_str(&file.vault_id).map_err(|_| {
-        VaultError::InvalidStructure("vault_id is not a valid UUID".to_owned())
-    })?;
+    Uuid::parse_str(&file.vault_id)
+        .map_err(|_| VaultError::InvalidStructure("vault_id is not a valid UUID".to_owned()))?;
     if file.created_at > file.updated_at {
         return Err(VaultError::InvalidStructure(
             "vault created_at is later than updated_at".to_owned(),
