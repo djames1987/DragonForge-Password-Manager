@@ -361,7 +361,7 @@ impl Vault {
             }
         }
 
-        matches.sort_by(|left, right| left.name.to_lowercase().cmp(&right.name.to_lowercase()));
+        matches.sort_by_key(|left| left.name.to_lowercase());
         Ok(matches)
     }
 
