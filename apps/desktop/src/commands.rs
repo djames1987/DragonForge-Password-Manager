@@ -4,7 +4,10 @@ use rfd::FileDialog;
 use tauri::State;
 use zeroize::Zeroize;
 
-use crate::{AppStatus, CreateVaultResponse, DesktopService, ItemDraft, ItemDto, ItemSummaryDto};
+use crate::{
+    AppStatus, CreateVaultResponse, DesktopService, ItemDraft, ItemDto, ItemSummaryDto,
+    SyncOutcome, SyncStatus,
+};
 
 fn error_message(error: impl core::fmt::Display) -> String {
     error.to_string()
@@ -137,4 +140,51 @@ pub fn pick_backup_destination() -> Option<String> {
         .set_file_name("dragonforge-backup.dfvault")
         .save_file()
         .map(|path| path.display().to_string())
+}
+
+
+#[tauri::command]
+pub fn sync_status(service: State<'_, DesktopService>) -> Result<SyncStatus, String> {
+    service.sync_status().map_err(error_message)
+}
+
+#[tauri::command]
+pub fn configure_sync(
+    service: State<'_, DesktopService>,
+    server_url: String,
+    mut sync_token: String,
+) -> Result<SyncStatus, String> {
+    let result = service
+        .configure_sync(&server_url, &sync_token)
+        .map_err(error_message);
+    sync_token.zeroize();
+    result
+}
+
+#[tauri::command]
+pub async fn sync_now(service: State<'_, DesktopService>) -> Result<SyncOutcome, String> {
+    let service = service.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || service.sync_now().map_err(error_message))
+        .await
+        .map_err(error_message)?
+}
+
+#[tauri::command]
+pub async fn resolve_sync_conflict(
+    service: State<'_, DesktopService>,
+    strategy: String,
+) -> Result<SyncOutcome, String> {
+    let service = service.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        service
+            .resolve_sync_conflict(&strategy)
+            .map_err(error_message)
+    })
+    .await
+    .map_err(error_message)?
+}
+
+#[tauri::command]
+pub fn remove_sync(service: State<'_, DesktopService>) -> Result<SyncStatus, String> {
+    service.remove_sync().map_err(error_message)
 }
