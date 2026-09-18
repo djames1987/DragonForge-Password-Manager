@@ -1,0 +1,22 @@
+{
+  "manifest_version": 3,
+  "name": "DragonForge Password Manager",
+  "version": "0.1.0",
+  "description": "Explicit, user-initiated credential filling from the DragonForge desktop vault.",
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "nativeMessaging"
+  ],
+  "background": {
+    "service_worker": "src/background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_title": "DragonForge",
+    "default_popup": "ui/popup.html"
+  },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'none';"
+  }
+}
