@@ -26,7 +26,7 @@ tower-http = { version = "0.6", features = ["limit", "timeout"] }
 uuid = { version = "1.18", features = ["v4", "serde"] }
 zeroize = { version = "1.8", features = ["zeroize_derive"] }
 
-sqlx = { version = "0.8", optional = true, default-features = false, features = ["runtime-tokio-rustls", "postgres", "uuid", "migrate"] }
+sqlx = { version = "0.8", optional = true, default-features = false, features = ["runtime-tokio-rustls", "postgres", "uuid", "migrate", "macros"] }
 
 [dev-dependencies]
 http-body-util = "0.1"
