@@ -1,66 +1,187 @@
-# Phase 1 Cryptographic Architecture
+# DragonForge Cryptographic Architecture
 
-## Scope
+## Current phase
 
-Phase 1 builds the symmetric/password cryptographic foundation. It deliberately does **not** implement post-quantum KEMs or signatures; those are Phase 2 work and will be integrated through crypto-agile interfaces.
+Phase 2 adds the post-quantum and hybrid public-key layer on top of the Phase 1 symmetric/password foundation.
 
 ## Password-based derivation
 
-The Phase 1 password KDF is Argon2id v1.3 with a 32-byte output. `Argon2idConfig` exposes memory, iteration, and lane parameters and rejects configurations below the project's current baseline:
+The password KDF is Argon2id v1.3 with a 32-byte output. `Argon2idConfig` rejects configurations below the project's current baseline:
 
 - memory: at least 19 MiB (19,456 KiB)
 - iterations: at least 2
 - lanes: at least 1
 - salt: at least 16 bytes
 
-The library default is intentionally stronger than the minimum: 64 MiB, 3 iterations, and 1 lane. Product clients should eventually benchmark devices and persist an explicit KDF profile rather than assume one cost is appropriate forever.
+The current library default is 64 MiB, 3 iterations, and 1 lane.
 
-A password-derived key will eventually unwrap a randomly generated vault master key. Vault records should never be encrypted directly with a master password.
+A password-derived key is intended to unwrap a randomly generated vault master key. Vault records should not be encrypted directly with a master password.
 
 ## Symmetric encryption
 
-Phase 1 uses AES-256-GCM through the RustCrypto `aes-gcm` crate. It requires a 256-bit key, generates a fresh 96-bit nonce from the operating-system CSPRNG, authenticates caller-provided associated data, and rejects modified ciphertext or mismatched AAD.
+AES-256-GCM is used for authenticated symmetric encryption.
 
-Nonce uniqueness is a hard requirement for AES-GCM. Future persistence layers must never reuse an envelope nonce for a new encryption under the same key.
+Requirements:
 
-## Key derivation and domain separation
+- 256-bit key.
+- Fresh 96-bit nonce for every encryption under a given key.
+- Associated data for record identity and protocol binding.
+- Authentication failure on modified ciphertext or mismatched AAD.
 
-HKDF-SHA-512 derives independent 256-bit subkeys. Callers must supply a non-empty `info` value naming the purpose of the derived key, such as:
+## HKDF
+
+HKDF-SHA-512 is used for domain-separated subkey derivation and for the Phase 2 hybrid combiner.
+
+## Secret key handling
+
+`SecretKey` wraps 32 bytes and intentionally does not implement ordinary serialization, `Clone`, or `Copy`. Its debug output is redacted and its backing memory is zeroized on drop.
+
+Phase 2 PQ private-key containers also avoid Serde serialization. Explicit seed export returns `Zeroizing<Vec<u8>>` so callers must opt into handling private material.
+
+Zeroization is defense in depth and cannot guarantee elimination of every historical compiler/runtime copy.
+
+## ML-KEM-768
+
+Phase 2 implements ML-KEM-768 through RustCrypto `ml-kem`.
+
+Current serialized sizes:
+
+- public/encapsulation key: 1184 bytes
+- private seed: 64 bytes
+- ciphertext: 1088 bytes
+- resulting shared secret: 32 bytes
+
+Public keys are validated during import. Private state is reconstructed from the 64-byte seed form rather than persisting expanded internal key state.
+
+Standalone ML-KEM APIs are exposed for testing and future protocol integration.
+
+## ML-DSA-65
+
+Phase 2 implements ML-DSA-65 through RustCrypto `ml-dsa`.
+
+Current serialized sizes:
+
+- private seed: 32 bytes
+- verifying key: 1952 bytes
+- signature: 3309 bytes
+
+The API supports:
+
+- key generation
+- seed restoration
+- signing
+- signature parsing
+- verification
+- rejection of modified messages/signatures
+
+ML-DSA-65 is intended for future device identity and authorization records.
+
+## Hybrid X25519 + ML-KEM-768
+
+DragonForge Phase 2 defines an application-level hybrid KEM for future device enrollment and sharing protocols.
+
+Recipient state:
 
 ```text
-dragonforge/vault/items/v1
-dragonforge/vault/files/v1
-dragonforge/vault/backups/v1
+long-term X25519 private key
++
+ML-KEM-768 decapsulation key
 ```
 
-## Secret key type
+Published recipient material:
 
-`SecretKey` wraps exactly 32 bytes and intentionally does not implement `Clone`, `Copy`, `Serialize`, or `Deserialize`. Its `Debug` output is redacted, and its backing array is zeroized on drop.
+```text
+X25519 public key
++
+ML-KEM-768 encapsulation key
+```
 
-Zeroization is defense in depth; Rust and the operating system cannot guarantee erasure of every historical compiler/runtime copy.
+Sender operation:
 
-## Versioned envelopes
+```text
+fresh ephemeral X25519 key
+        │
+        ├── X25519 shared secret
+        │
+recipient X25519 public key
 
-Every `EncryptedEnvelope` carries a format version, cipher-suite identifier, AEAD nonce, and authenticated ciphertext. Decryption checks version and suite before invoking a cipher, enabling controlled future migration.
+recipient ML-KEM public key
+        │
+        └── ML-KEM shared secret + ML-KEM ciphertext
+```
 
-AAD is deliberately supplied by the containing protocol rather than stored as trusted envelope data.
+The two 32-byte shared secrets are concatenated and processed through HKDF-SHA-512.
+
+The HKDF transcript includes length-delimited fields for:
+
+- DragonForge hybrid protocol domain
+- caller-supplied protocol context
+- recipient X25519 public key
+- recipient ML-KEM public key
+- sender ephemeral X25519 public key
+- ML-KEM ciphertext
+
+This prevents the final key from being independent of the handshake transcript or intended protocol use.
+
+The X25519 result must be contributory. All-zero/non-contributory peer values are rejected.
+
+### Important interoperability note
+
+This Phase 2 application-level hybrid construction is **not claimed to be the TLS 1.3 X25519MLKEM768 wire format**. TLS hybrid negotiation belongs to the transport layer and will be implemented through a standards-compliant TLS stack in a later phase.
+
+## Public and private serialization boundaries
+
+Public keys and ciphertext structures can be serialized.
+
+Private ML-KEM, ML-DSA, and X25519 key containers are intentionally not Serde-serializable. Future encrypted device-key persistence must wrap private seeds/keys under device or vault key encryption rather than place them directly in general application data structures.
+
+## Versioned encrypted envelopes
+
+Every symmetric `EncryptedEnvelope` carries a format version and cipher-suite identifier. Decryption checks both before invoking the cipher.
 
 ## Key wrapping
 
-Phase 1 key wrapping encrypts one 256-bit `SecretKey` under another using AEAD and domain-separated associated data:
+Phase 1 key wrapping remains the mechanism for encrypting one 256-bit secret key beneath another using authenticated encryption and domain-separated AAD.
 
-```text
-dragonforge/key-wrap/v1 || context_length || context
-```
+## Dependency selection
 
-## Randomness
+Phase 2 deliberately does not use `pqcrypto-*` because that ecosystem became unmaintained after the upstream PQClean archival process. The current implementation uses pure-Rust RustCrypto ML-KEM and ML-DSA crates and `x25519-dalek`.
 
-`OsRandom` delegates to the operating system through `rand_core::OsRng`.
+These upstream implementations still require independent review before DragonForge can claim production assurance.
 
-## Crypto agility
+## Tests
 
-Higher layers should depend on the crate's narrow traits (`PasswordKdf`, `AeadCipher`, `KeyDeriver`, `RandomSource`) rather than scattering primitive calls throughout the application.
+The integration test suite covers:
 
-## Non-goals in Phase 1
+- ML-KEM encapsulate/decapsulate agreement
+- ML-KEM seed restore
+- ML-KEM malformed public/ciphertext lengths
+- ML-DSA sign/verify
+- ML-DSA modified-message rejection
+- ML-DSA modified-signature rejection
+- ML-DSA seed restore
+- invalid ML-DSA public key lengths
+- hybrid agreement
+- protocol-context binding
+- empty-context rejection
+- non-contributory X25519 rejection
+- hybrid ciphertext serialization round trip
+- private-key debug redaction
 
-Phase 1 does not yet provide a persistent vault format, post-quantum KEM/signatures, synchronization, account authentication, device enrollment, recovery, sharing, browser/mobile integration, or rollback-resistant state logs.
+See `docs/PHASE2_TESTING.md`.
+
+## Remaining non-goals
+
+Phase 2 still does not provide:
+
+- persistent vault storage
+- a vault master-key hierarchy
+- account authentication
+- sync/server protocols
+- device enrollment workflows
+- recovery
+- secure item sharing
+- browser/mobile integration
+- rollback-resistant state logs
+- standards-compliant PQ/T TLS configuration
+- independent cryptographic audit
