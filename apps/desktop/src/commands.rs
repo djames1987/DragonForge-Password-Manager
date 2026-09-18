@@ -4,9 +4,7 @@ use rfd::FileDialog;
 use tauri::State;
 use zeroize::Zeroize;
 
-use crate::{
-    AppStatus, CreateVaultResponse, DesktopService, ItemDraft, ItemDto, ItemSummaryDto,
-};
+use crate::{AppStatus, CreateVaultResponse, DesktopService, ItemDraft, ItemDto, ItemSummaryDto};
 
 fn error_message(error: impl core::fmt::Display) -> String {
     error.to_string()
@@ -38,11 +36,7 @@ pub fn unlock_vault(
     mut account_secret_hex: String,
 ) -> Result<AppStatus, String> {
     let result = service
-        .unlock_vault(
-            PathBuf::from(path),
-            &master_password,
-            &account_secret_hex,
-        )
+        .unlock_vault(PathBuf::from(path), &master_password, &account_secret_hex)
         .map_err(error_message);
     master_password.zeroize();
     account_secret_hex.zeroize();
@@ -63,10 +57,7 @@ pub fn list_items(
 }
 
 #[tauri::command]
-pub fn get_item(
-    service: State<'_, DesktopService>,
-    id: String,
-) -> Result<ItemDto, String> {
+pub fn get_item(service: State<'_, DesktopService>, id: String) -> Result<ItemDto, String> {
     service.get_item(&id).map_err(error_message)
 }
 
@@ -81,10 +72,7 @@ pub fn save_item(
 }
 
 #[tauri::command]
-pub fn delete_item(
-    service: State<'_, DesktopService>,
-    id: String,
-) -> Result<(), String> {
+pub fn delete_item(service: State<'_, DesktopService>, id: String) -> Result<(), String> {
     service.delete_item(&id).map_err(error_message)
 }
 
