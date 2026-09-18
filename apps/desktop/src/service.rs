@@ -46,10 +46,11 @@ pub struct AppStatus {
     pub item_count: usize,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Zeroize, ZeroizeOnDrop)]
 #[serde(rename_all = "camelCase")]
 pub struct CreateVaultResponse {
     pub account_secret_hex: String,
+    #[zeroize(skip)]
     pub status: AppStatus,
 }
 
@@ -64,7 +65,7 @@ pub struct ItemSummaryDto {
     pub updated_at: u64,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Zeroize, ZeroizeOnDrop)]
 #[serde(rename_all = "camelCase")]
 pub struct ItemDto {
     pub id: String,
@@ -169,20 +170,20 @@ impl DesktopService {
         let session = session.as_ref().ok_or(DesktopError::Locked)?;
         let item = session.vault.get_item(id)?;
 
-        let (kind, username, password, url, notes) = match item.data {
+        let (kind, username, password, url, notes) = match &item.data {
             VaultItemData::Login(login) => (
                 "login".to_owned(),
-                login.username,
-                login.password,
-                login.url,
-                login.notes,
+                login.username.clone(),
+                login.password.clone(),
+                login.url.clone(),
+                login.notes.clone(),
             ),
             VaultItemData::SecureNote(note) => (
                 "secure_note".to_owned(),
                 String::new(),
                 String::new(),
                 String::new(),
-                note.notes,
+                note.notes.clone(),
             ),
         };
 
