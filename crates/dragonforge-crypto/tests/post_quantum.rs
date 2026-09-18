@@ -1,7 +1,7 @@
 use dragonforge_crypto::{
-    CryptoError, HybridKemCiphertext, HybridKemKeyPair, MlDsa65KeyPair, MlDsa65VerifyingKey,
-    MlKem768KeyPair, MlKem768PublicKey, ML_DSA_65_PUBLIC_KEY_LEN, ML_DSA_65_SIGNATURE_LEN,
-    ML_KEM_768_CIPHERTEXT_LEN, ML_KEM_768_PUBLIC_KEY_LEN, hybrid_kem_encapsulate,
+    CryptoError, HybridKemCiphertext, HybridKemKeyPair, ML_DSA_65_PUBLIC_KEY_LEN,
+    ML_DSA_65_SIGNATURE_LEN, ML_KEM_768_CIPHERTEXT_LEN, ML_KEM_768_PUBLIC_KEY_LEN, MlDsa65KeyPair,
+    MlDsa65VerifyingKey, MlKem768KeyPair, MlKem768PublicKey, hybrid_kem_encapsulate,
     ml_kem_768_encapsulate,
 };
 
@@ -103,8 +103,7 @@ fn hybrid_x25519_mlkem768_round_trip() {
     let recipient = HybridKemKeyPair::generate();
     let context = b"dragonforge/device-enrollment/v1";
 
-    let (ciphertext, sender_key) =
-        hybrid_kem_encapsulate(recipient.public_key(), context).unwrap();
+    let (ciphertext, sender_key) = hybrid_kem_encapsulate(recipient.public_key(), context).unwrap();
     let recipient_key = recipient.decapsulate(&ciphertext, context).unwrap();
 
     assert!(sender_key.ct_eq(&recipient_key));
