@@ -13,7 +13,7 @@ pub use service::{
     AppStatus, BrowserCredential, BrowserLoginSummary, CreateVaultResponse, DesktopError,
     DesktopService, ItemDraft, ItemDto, ItemSummaryDto,
 };
-pub use sync::{SyncOutcome, SyncStatus};
+pub use sync::{SyncError, SyncOutcome, SyncStatus};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
