@@ -290,7 +290,10 @@ pub fn forward_native_request(request: &BrowserRequest) -> BrowserResponse {
     encoded.push(b'\n');
 
     if stream.write_all(&encoded).is_err() || stream.flush().is_err() {
-        return BrowserResponse::error("desktopUnavailable", "failed to contact DragonForge desktop");
+        return BrowserResponse::error(
+            "desktopUnavailable",
+            "failed to contact DragonForge desktop",
+        );
     }
 
     let mut reader = BufReader::new(stream);
