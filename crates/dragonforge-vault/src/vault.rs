@@ -562,6 +562,20 @@ fn unix_time() -> u64 {
         .as_secs()
 }
 
+pub fn validate_encrypted_vault_bytes(bytes: &[u8]) -> Result<String> {
+    if bytes.len() > crate::MAX_VAULT_FILE_BYTES {
+        return Err(VaultError::ResourceLimit(format!(
+            "vault payload is {} bytes; maximum is {} bytes",
+            bytes.len(),
+            crate::MAX_VAULT_FILE_BYTES
+        )));
+    }
+
+    let file: VaultFile = serde_json::from_slice(bytes)?;
+    validate_vault_file(&file)?;
+    Ok(file.vault_id)
+}
+
 fn validate_vault_file(file: &VaultFile) -> Result<()> {
     if file.version != CURRENT_VAULT_FORMAT_VERSION {
         return Err(VaultError::UnsupportedFormatVersion(file.version));
