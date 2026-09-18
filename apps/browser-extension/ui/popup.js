@@ -53,6 +53,8 @@ async function initialize() {
 
   const status = await send({ type: "status" });
   if (!status.ok) {
+    $("offline-message").textContent =
+      status.error || "Start DragonForge Password Manager, then reopen this extension.";
     showView("offline-view");
     return;
   }
@@ -75,6 +77,8 @@ async function refresh() {
       showView("locked-view");
     } else {
       $("status-dot").className = "status-dot";
+      $("offline-message").textContent =
+        response.error || "DragonForge desktop connection is unavailable.";
       showView("offline-view");
     }
     return;
