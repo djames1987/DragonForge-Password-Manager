@@ -193,7 +193,9 @@ impl DesktopService {
         query: Option<&str>,
     ) -> DesktopResult<Vec<BrowserLoginSummary>> {
         let requested_host = normalized_host(page_url).ok_or_else(|| {
-            DesktopError::InvalidInput("the active tab URL is not a supported web origin".to_owned())
+            DesktopError::InvalidInput(
+                "the active tab URL is not a supported web origin".to_owned(),
+            )
         })?;
         let query = query.unwrap_or_default().trim().to_ascii_lowercase();
 
@@ -230,8 +232,8 @@ impl DesktopService {
             matches.push(BrowserLoginSummary {
                 id: item.id,
                 name: item.name,
-                username: login.username,
-                url: login.url,
+                username: login.username.clone(),
+                url: login.url.clone(),
                 favorite: item.favorite,
             });
 
@@ -241,10 +243,11 @@ impl DesktopService {
         }
 
         matches.sort_by(|left, right| {
-            right
-                .favorite
-                .cmp(&left.favorite)
-                .then_with(|| left.name.to_ascii_lowercase().cmp(&right.name.to_ascii_lowercase()))
+            right.favorite.cmp(&left.favorite).then_with(|| {
+                left.name
+                    .to_ascii_lowercase()
+                    .cmp(&right.name.to_ascii_lowercase())
+            })
         });
         Ok(matches)
     }
@@ -268,7 +271,9 @@ impl DesktopService {
         };
 
         let stored_host = normalized_host(&login.url).ok_or_else(|| {
-            DesktopError::InvalidInput("the saved login URL is not a supported web origin".to_owned())
+            DesktopError::InvalidInput(
+                "the saved login URL is not a supported web origin".to_owned(),
+            )
         })?;
         if stored_host != requested_host {
             return Err(DesktopError::InvalidInput(
@@ -279,8 +284,8 @@ impl DesktopService {
         Ok(BrowserCredential {
             id: item.id,
             name: item.name,
-            username: login.username,
-            password: login.password,
+            username: login.username.clone(),
+            password: login.password.clone(),
         })
     }
 
@@ -518,7 +523,6 @@ fn summary_to_dto(summary: VaultItemSummary) -> ItemSummaryDto {
     }
 }
 
-
 fn normalized_host(value: &str) -> Option<String> {
     let parsed = Url::parse(value).ok()?;
     match parsed.scheme() {
@@ -526,6 +530,9 @@ fn normalized_host(value: &str) -> Option<String> {
         _ => return None,
     }
 
-    let host = parsed.host_str()?.trim_end_matches('.').to_ascii_lowercase();
+    let host = parsed
+        .host_str()?
+        .trim_end_matches('.')
+        .to_ascii_lowercase();
     Some(host.strip_prefix("www.").unwrap_or(&host).to_owned())
 }
