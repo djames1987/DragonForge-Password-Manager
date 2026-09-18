@@ -56,3 +56,27 @@ jobs:
 
       - name: Desktop release build
         run: cargo build -p dragonforge-desktop --release
+
+  windows-desktop:
+    name: Windows desktop build
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+
+      - name: Check desktop crate
+        run: cargo check -p dragonforge-desktop --all-targets
+
+      - name: Run desktop service tests
+        run: cargo test -p dragonforge-desktop --test desktop_service -- --nocapture
+
+      - name: Build Windows desktop release
+        run: cargo build -p dragonforge-desktop --release
