@@ -16,6 +16,7 @@
     search: "",
     passwordVisible: false,
     editorKind: "login",
+    syncStatus: null,
   };
 
   const $ = (id) => document.getElementById(id);
@@ -95,6 +96,7 @@
       "settings-password",
       "settings-password-confirm",
       "settings-secret",
+      "sync-token",
       "recovery-secret"
     ]) {
       const node = $(id);
@@ -286,6 +288,8 @@
       $("settings-password").value = "";
       $("settings-password-confirm").value = "";
       $("settings-secret").value = "";
+      $("sync-token").value = "";
+      $("sync-conflict-actions").classList.add("hidden");
     }
   }
 
@@ -481,6 +485,123 @@
     }
   }
 
+  async function refreshSyncStatus() {
+    try {
+      const status = await call("sync_status");
+      state.syncStatus = status;
+      $("sync-status-title").textContent = status.configured
+        ? "Sync configured"
+        : "Sync not configured";
+      $("sync-status-detail").textContent = status.configured
+        ? (status.serverUrl + " · revision " + status.lastRevision)
+        : "Configure a server and 256-bit sync token to begin.";
+      if (status.serverUrl) $("sync-server-url").value = status.serverUrl;
+      $("settings-sync-now").disabled = !status.configured;
+      $("remove-sync").disabled = !status.configured;
+      return status;
+    } catch (error) {
+      state.syncStatus = null;
+      $("sync-status-title").textContent = "Sync unavailable";
+      $("sync-status-detail").textContent = error.message;
+      throw error;
+    }
+  }
+
+  async function configureSync() {
+    const button = $("configure-sync");
+    const serverUrl = $("sync-server-url").value.trim();
+    const syncToken = $("sync-token").value.replace(/\s+/g, "");
+    if (!serverUrl) return toast("Enter the DragonForge sync server URL.", "error");
+    if (!syncToken) return toast("Enter the 64-character sync token.", "error");
+
+    setBusy(button, true, "Saving…");
+    try {
+      await call("configure_sync", { serverUrl, syncToken });
+      $("sync-token").value = "";
+      $("sync-conflict-actions").classList.add("hidden");
+      await refreshSyncStatus();
+      toast("Sync settings saved. Run Sync now to establish this device.");
+    } catch (error) {
+      toast(error.message, "error");
+    } finally {
+      setBusy(button, false);
+    }
+  }
+
+  async function runSync() {
+    const button = $("settings-sync-now");
+    if (button) setBusy(button, true, "Syncing…");
+    try {
+      const outcome = await call("sync_now");
+      if (["conflict", "initialConflict", "remoteRollback", "remoteMismatch", "remoteMissing"].includes(outcome.action)) {
+        $("settings-modal").classList.remove("hidden");
+        $("sync-conflict-actions").classList.toggle(
+          "hidden",
+          !["conflict", "initialConflict"].includes(outcome.action)
+        );
+        await refreshSyncStatus();
+        toast(outcome.message, "error");
+        return;
+      }
+
+      $("sync-conflict-actions").classList.add("hidden");
+      if (outcome.vaultLocked) {
+        state.status = await call("app_status");
+        showWelcome();
+        toast(outcome.message);
+        return;
+      }
+
+      await refreshSyncStatus();
+      toast(outcome.message);
+    } catch (error) {
+      toast(error.message, "error");
+    } finally {
+      if (button) setBusy(button, false);
+    }
+  }
+
+  async function resolveSync(strategy) {
+    const button = strategy === "keepLocal" ? $("keep-local-sync") : $("keep-remote-sync");
+    const warning = strategy === "keepLocal"
+      ? "Keep the LOCAL encrypted vault and overwrite the current remote copy?"
+      : "Keep the REMOTE encrypted vault and replace the current local copy?";
+    if (!window.confirm(warning + " This choice cannot be automatically merged.")) return;
+
+    setBusy(button, true, "Resolving…");
+    try {
+      const outcome = await call("resolve_sync_conflict", { strategy });
+      $("sync-conflict-actions").classList.add("hidden");
+      if (outcome.vaultLocked) {
+        state.status = await call("app_status");
+        showWelcome();
+        toast(outcome.message);
+        return;
+      }
+      await refreshSyncStatus();
+      toast(outcome.message);
+    } catch (error) {
+      toast(error.message, "error");
+    } finally {
+      setBusy(button, false);
+    }
+  }
+
+  async function removeSync() {
+    if (!window.confirm("Remove sync settings from this device? The local encrypted vault will remain unchanged.")) return;
+    try {
+      await call("remove_sync");
+      state.syncStatus = null;
+      $("sync-server-url").value = "";
+      $("sync-token").value = "";
+      $("sync-conflict-actions").classList.add("hidden");
+      await refreshSyncStatus();
+      toast("Sync settings removed from this device.");
+    } catch (error) {
+      toast(error.message, "error");
+    }
+  }
+
   function bindEvents() {
     $("show-create").addEventListener("click", () => showAuthPanel("create-panel"));
     $("show-unlock").addEventListener("click", () => showAuthPanel("unlock-panel"));
@@ -556,7 +677,20 @@
     $("lock-action").addEventListener("click", lockVault);
     $("verify-action").addEventListener("click", verifyVault);
     $("backup-action").addEventListener("click", exportBackup);
-    $("settings-action").addEventListener("click", () => $("settings-modal").classList.remove("hidden"));
+    $("sync-action").addEventListener("click", runSync);
+    $("settings-action").addEventListener("click", async () => {
+      $("settings-modal").classList.remove("hidden");
+      try {
+        await refreshSyncStatus();
+      } catch (error) {
+        toast(error.message, "error");
+      }
+    });
+    $("configure-sync").addEventListener("click", configureSync);
+    $("settings-sync-now").addEventListener("click", runSync);
+    $("keep-local-sync").addEventListener("click", () => resolveSync("keepLocal"));
+    $("keep-remote-sync").addEventListener("click", () => resolveSync("keepRemote"));
+    $("remove-sync").addEventListener("click", removeSync);
     $("settings-verify").addEventListener("click", verifyVault);
     $("change-password").addEventListener("click", changeMasterPassword);
 
