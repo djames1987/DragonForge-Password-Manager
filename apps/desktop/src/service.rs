@@ -279,12 +279,7 @@ impl DesktopService {
     ) -> DesktopResult<AppStatus> {
         let account_secret = decode_account_secret(account_secret_hex)?;
         let destination = normalize_vault_path(destination.into())?;
-        let vault = Vault::import_backup(
-            source,
-            &destination,
-            master_password,
-            &account_secret,
-        )?;
+        let vault = Vault::import_backup(source, &destination, master_password, &account_secret)?;
         let status = AppStatus {
             unlocked: true,
             vault_path: Some(destination.display().to_string()),
@@ -335,7 +330,10 @@ fn normalize_vault_path(mut path: PathBuf) -> DesktopResult<PathBuf> {
 }
 
 fn decode_account_secret(value: &str) -> DesktopResult<AccountSecret> {
-    let compact: String = value.chars().filter(|character| !character.is_whitespace()).collect();
+    let compact: String = value
+        .chars()
+        .filter(|character| !character.is_whitespace())
+        .collect();
     let mut bytes = hex::decode(compact).map_err(|_| DesktopError::InvalidAccountSecret)?;
     let result = AccountSecret::from_bytes(&bytes).map_err(|_| DesktopError::InvalidAccountSecret);
     bytes.zeroize();
