@@ -20,15 +20,16 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     let admin_token = env::var("DRAGONFORGE_SYNC_ADMIN_TOKEN").ok();
 
     #[cfg(feature = "postgres")]
-    let store: Arc<dyn SyncStore> =
-        if let Ok(database_url) = env::var("DRAGONFORGE_SYNC_DATABASE_URL") {
-            Arc::new(PostgresStore::connect(&database_url).await?)
-        } else {
-            eprintln!(
-                "WARNING: DRAGONFORGE_SYNC_DATABASE_URL is not set; using volatile in-memory storage"
-            );
-            Arc::new(InMemoryStore::default())
-        };
+    let store: Arc<dyn SyncStore> = if let Ok(database_url) =
+        env::var("DRAGONFORGE_SYNC_DATABASE_URL")
+    {
+        Arc::new(PostgresStore::connect(&database_url).await?)
+    } else {
+        eprintln!(
+            "WARNING: DRAGONFORGE_SYNC_DATABASE_URL is not set; using volatile in-memory storage"
+        );
+        Arc::new(InMemoryStore::default())
+    };
 
     #[cfg(not(feature = "postgres"))]
     let store: Arc<dyn SyncStore> = {
