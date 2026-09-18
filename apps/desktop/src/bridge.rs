@@ -232,8 +232,8 @@ pub fn bridge_endpoint_path() -> io::Result<PathBuf> {
 
 pub fn read_endpoint(path: &Path) -> io::Result<BridgeEndpoint> {
     let bytes = fs::read(path)?;
-    let endpoint: BridgeEndpoint =
-        serde_json::from_slice(&bytes).map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
+    let endpoint: BridgeEndpoint = serde_json::from_slice(&bytes)
+        .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
     if endpoint.version != BROWSER_PROTOCOL_VERSION || endpoint.token.len() != 64 {
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
@@ -403,7 +403,7 @@ fn map_desktop_error(error: DesktopError) -> BrowserResponse {
         DesktopError::StateUnavailable => BrowserResponse::error(
             "desktopUnavailable",
             "DragonForge desktop state is unavailable",
-        )
+        ),
         DesktopError::Vault(error) => BrowserResponse::error("vaultError", error.to_string()),
         DesktopError::InvalidAccountSecret => {
             BrowserResponse::error("invalidRequest", "invalid Account Secret")
