@@ -1,8 +1,8 @@
 use core::fmt;
 
 use ml_dsa::{
-    KeyExport, KeyInit, MlDsa65, Signature, SignatureEncoding, Signer, SigningKey, Verifier,
-    VerifyingKey,
+    Generate, KeyExport, KeyInit, Keypair, MlDsa65, Signature, SignatureEncoding, Signer,
+    SigningKey, Verifier, VerifyingKey,
 };
 use serde::{Deserialize, Serialize};
 use zeroize::Zeroizing;
