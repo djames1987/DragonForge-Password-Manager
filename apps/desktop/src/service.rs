@@ -1,6 +1,6 @@
 use std::{
     path::{Path, PathBuf},
-    sync::{Mutex, MutexGuard},
+    sync::{Arc, Mutex, MutexGuard},
 };
 
 use dragonforge_vault::{
@@ -9,6 +9,7 @@ use dragonforge_vault::{
 };
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
+use url::Url;
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
 #[derive(Debug, Error)]
@@ -32,9 +33,9 @@ struct Session {
     path: PathBuf,
 }
 
-#[derive(Default)]
+#[derive(Clone, Default)]
 pub struct DesktopService {
-    session: Mutex<Option<Session>>,
+    session: Arc<Mutex<Option<Session>>>,
 }
 
 #[derive(Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -52,6 +53,27 @@ pub struct CreateVaultResponse {
     pub account_secret_hex: String,
     #[zeroize(skip)]
     pub status: AppStatus,
+}
+
+#[derive(Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct BrowserLoginSummary {
+    pub id: String,
+    pub name: String,
+    pub username: String,
+    pub url: String,
+    pub favorite: bool,
+}
+
+#[derive(Serialize, Deserialize, Zeroize, ZeroizeOnDrop)]
+#[serde(rename_all = "camelCase")]
+pub struct BrowserCredential {
+    #[zeroize(skip)]
+    pub id: String,
+    #[zeroize(skip)]
+    pub name: String,
+    pub username: String,
+    pub password: String,
 }
 
 #[derive(Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -163,6 +185,103 @@ impl DesktopService {
             None => session.vault.list()?,
         };
         Ok(summaries.into_iter().map(summary_to_dto).collect())
+    }
+
+    pub fn browser_search(
+        &self,
+        page_url: &str,
+        query: Option<&str>,
+    ) -> DesktopResult<Vec<BrowserLoginSummary>> {
+        let requested_host = normalized_host(page_url).ok_or_else(|| {
+            DesktopError::InvalidInput("the active tab URL is not a supported web origin".to_owned())
+        })?;
+        let query = query.unwrap_or_default().trim().to_ascii_lowercase();
+
+        let session = self.lock_session()?;
+        let session = session.as_ref().ok_or(DesktopError::Locked)?;
+
+        let mut matches = Vec::new();
+        for summary in session.vault.list()? {
+            if summary.kind != VaultItemKind::Login {
+                continue;
+            }
+
+            let item = session.vault.get_item(&summary.id)?;
+            let VaultItemData::Login(login) = item.data else {
+                continue;
+            };
+
+            if normalized_host(&login.url).as_deref() != Some(requested_host.as_str()) {
+                continue;
+            }
+
+            if !query.is_empty() {
+                let searchable = format!(
+                    "{}\n{}\n{}",
+                    item.name.to_ascii_lowercase(),
+                    login.username.to_ascii_lowercase(),
+                    login.url.to_ascii_lowercase()
+                );
+                if !searchable.contains(&query) {
+                    continue;
+                }
+            }
+
+            matches.push(BrowserLoginSummary {
+                id: item.id,
+                name: item.name,
+                username: login.username,
+                url: login.url,
+                favorite: item.favorite,
+            });
+
+            if matches.len() >= 20 {
+                break;
+            }
+        }
+
+        matches.sort_by(|left, right| {
+            right
+                .favorite
+                .cmp(&left.favorite)
+                .then_with(|| left.name.to_ascii_lowercase().cmp(&right.name.to_ascii_lowercase()))
+        });
+        Ok(matches)
+    }
+
+    pub fn browser_credential(
+        &self,
+        item_id: &str,
+        page_url: &str,
+    ) -> DesktopResult<BrowserCredential> {
+        let requested_host = normalized_host(page_url).ok_or_else(|| {
+            DesktopError::InvalidInput("the active tab URL is not a supported web origin".to_owned())
+        })?;
+
+        let session = self.lock_session()?;
+        let session = session.as_ref().ok_or(DesktopError::Locked)?;
+        let item = session.vault.get_item(item_id)?;
+        let VaultItemData::Login(login) = item.data else {
+            return Err(DesktopError::InvalidInput(
+                "only login items can be sent to a browser".to_owned(),
+            ));
+        };
+
+        let stored_host = normalized_host(&login.url).ok_or_else(|| {
+            DesktopError::InvalidInput("the saved login URL is not a supported web origin".to_owned())
+        })?;
+        if stored_host != requested_host {
+            return Err(DesktopError::InvalidInput(
+                "the requested credential does not belong to the active site".to_owned(),
+            ));
+        }
+
+        Ok(BrowserCredential {
+            id: item.id,
+            name: item.name,
+            username: login.username,
+            password: login.password,
+        })
     }
 
     pub fn get_item(&self, id: &str) -> DesktopResult<ItemDto> {
@@ -397,4 +516,16 @@ fn summary_to_dto(summary: VaultItemSummary) -> ItemSummaryDto {
         tags: summary.tags,
         updated_at: summary.updated_at,
     }
+}
+
+
+fn normalized_host(value: &str) -> Option<String> {
+    let parsed = Url::parse(value).ok()?;
+    match parsed.scheme() {
+        "http" | "https" => {}
+        _ => return None,
+    }
+
+    let host = parsed.host_str()?.trim_end_matches('.').to_ascii_lowercase();
+    Some(host.strip_prefix("www.").unwrap_or(&host).to_owned())
 }
