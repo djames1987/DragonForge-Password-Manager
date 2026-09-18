@@ -200,7 +200,11 @@ fn encrypted_backup_can_be_imported_and_validated() {
 
     let (mut vault, secret) = Vault::create(&source, MASTER).unwrap();
     let id = vault
-        .add_secure_note("Backup Test", "encrypted backup body", vec!["backup".into()])
+        .add_secure_note(
+            "Backup Test",
+            "encrypted backup body",
+            vec!["backup".into()],
+        )
         .unwrap();
     vault.export_backup(&backup).unwrap();
 
