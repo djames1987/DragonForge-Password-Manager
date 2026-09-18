@@ -45,11 +45,14 @@ pub struct BrowserRequest {
 pub enum BrowserAction {
     Status,
     Search {
+        #[serde(rename = "pageUrl")]
         page_url: String,
         query: Option<String>,
     },
     Credential {
+        #[serde(rename = "pageUrl")]
         page_url: String,
+        #[serde(rename = "itemId")]
         item_id: String,
     },
 }
@@ -481,6 +484,33 @@ mod tests {
         assert!(tokens_equal("abc", "abc"));
         assert!(!tokens_equal("abc", "abd"));
         assert!(!tokens_equal("abc", "ab"));
+    }
+
+    #[test]
+    fn browser_request_deserializes_extension_camel_case_fields() {
+        let search: BrowserRequest = serde_json::from_str(
+            r#"{"version":1,"action":"search","pageUrl":"https://example.com/login","query":"alice"}"#,
+        )
+        .unwrap();
+        match search.action {
+            BrowserAction::Search { page_url, query } => {
+                assert_eq!(page_url, "https://example.com/login");
+                assert_eq!(query.as_deref(), Some("alice"));
+            }
+            _ => panic!("expected search request"),
+        }
+
+        let credential: BrowserRequest = serde_json::from_str(
+            r#"{"version":1,"action":"credential","pageUrl":"https://example.com/login","itemId":"item-1"}"#,
+        )
+        .unwrap();
+        match credential.action {
+            BrowserAction::Credential { page_url, item_id } => {
+                assert_eq!(page_url, "https://example.com/login");
+                assert_eq!(item_id, "item-1");
+            }
+            _ => panic!("expected credential request"),
+        }
     }
 
     #[test]
