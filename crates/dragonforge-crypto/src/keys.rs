@@ -17,12 +17,13 @@ impl SecretKey {
 
     pub fn try_from_slice(bytes: &[u8]) -> Result<Self> {
         let actual = bytes.len();
-        let array: [u8; SECRET_KEY_LEN] = bytes.try_into().map_err(|_| {
-            CryptoError::InvalidKeyLength {
-                expected: SECRET_KEY_LEN,
-                actual,
-            }
-        })?;
+        let array: [u8; SECRET_KEY_LEN] =
+            bytes
+                .try_into()
+                .map_err(|_| CryptoError::InvalidKeyLength {
+                    expected: SECRET_KEY_LEN,
+                    actual,
+                })?;
         Ok(Self(array))
     }
 
