@@ -2,7 +2,7 @@
 
 DragonForge Password Manager is a security-first, zero-knowledge password manager project designed for long-term cryptographic agility and post-quantum migration.
 
-> **Development status:** Phase 4 — Secure Storage Architecture / Vault Hardening
+> **Development status:** Phase 5 — Desktop Application Foundation
 
 ## Completed phases
 
@@ -60,13 +60,33 @@ DragonForge Password Manager is a security-first, zero-knowledge password manage
 - Automated Windows verification script with timestamped uploadable logs.
 - CI now runs debug workspace tests, Phase 4 hardening serially, and optimized release tests.
 
+
+### Phase 5 — Desktop Application Foundation
+
+- Native desktop shell built with Tauri 2 and the existing Rust vault core.
+- Modern dark three-pane UI with responsive navigation, searchable item list, and detail view.
+- Create/open vault flows using native file pickers.
+- One-time Account Secret recovery screen after vault creation.
+- Login and secure-note create/edit/delete workflows.
+- Favorites and local encrypted-vault search.
+- Built-in password generation.
+- Encrypted backup export and full-vault integrity verification.
+- Master-password change workflow requiring the Account Secret.
+- Rust-owned unlocked vault session; the frontend never owns the vault object or VMK.
+- Command inputs containing master passwords and Account Secrets are zeroized after use.
+- Strict Content Security Policy and no localStorage/sessionStorage secret persistence.
+- Vault content is rendered with DOM text nodes rather than injected HTML.
+- Locking the vault drops the Rust session and scrubs decrypted values from the webview DOM.
+- Desktop service integration tests cover create/unlock/CRUD/search/password generation/backup.
+- Linux CI installs the Tauri/WebKit build prerequisites and checks the desktop application with the rest of the workspace.
+
 The post-quantum implementation uses the pure-Rust RustCrypto `ml-kem` and `ml-dsa` crates rather than the older unmaintained `pqcrypto-*` bindings.
 
 ## Workspace
 
 ```text
 .
-├── crates/
+├── apps/\n│   └── desktop/\n│       ├── src/\n│       ├── tests/\n│       └── ui/\n├── crates/
 │   ├── dragonforge-crypto/
 │   └── dragonforge-vault/
 │       ├── src/
@@ -92,7 +112,7 @@ The post-quantum implementation uses the pure-Rust RustCrypto `ml-kem` and `ml-d
 └── .github/workflows/ci.yml
 ```
 
-## Automated Windows verification
+## Run the desktop application\n\nOn Windows, after installing the Rust toolchain and Microsoft C++ build tools/WebView2 prerequisites, run:\n\n```powershell\ncargo run -p dragonforge-desktop\n```\n\nThe desktop application opens directly from the checked-in HTML/CSS/JavaScript frontend; there is no Node/npm build step in Phase 5.\n\nSee [docs/PHASE5_DESKTOP.md](docs/PHASE5_DESKTOP.md) for the desktop architecture and [docs/PHASE5_TESTING.md](docs/PHASE5_TESTING.md) for verification.\n\n## Automated Windows verification
 
 After pulling the repository, run:
 
@@ -109,13 +129,13 @@ scripts\run-phase4-tests.cmd
 The script runs all noninteractive quality gates and tests, repeats the Phase 4 hardening suite three times by default, runs release-mode tests, and creates:
 
 ```text
-test-logs\dragonforge-phase4-YYYYMMDD-HHMMSS.log
+test-logs\dragonforge-phase5-YYYYMMDD-HHMMSS.log
 test-logs\dragonforge-phase4-YYYYMMDD-HHMMSS.log.sha256
 ```
 
 Upload the `.log` file when you want the results reviewed.
 
-See [docs/PHASE4_TESTING.md](docs/PHASE4_TESTING.md).
+See [docs/PHASE5_TESTING.md](docs/PHASE5_TESTING.md).
 
 ## Manual commands
 
