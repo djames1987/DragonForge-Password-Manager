@@ -21,7 +21,7 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     let mut admin_token = env::var("DRAGONFORGE_SYNC_ADMIN_TOKEN").ok();
     if admin_token
         .as_ref()
-        .is_some_and(|token| token.as_bytes().len() < 32)
+        .is_some_and(|token| token.len() < 32)
     {
         return Err(std::io::Error::new(
             std::io::ErrorKind::InvalidInput,
