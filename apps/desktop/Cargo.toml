@@ -38,9 +38,11 @@ zeroize = { version = "1.8", features = ["zeroize_derive"] }
 tauri-build = { version = "2.6.3", features = [] }
 
 [dev-dependencies]
+axum = "0.8"
 dragonforge-sync-server = { path = "../sync-server" }
 tempfile = "3.27"
 tokio = { version = "1.47", features = ["rt-multi-thread", "net"] }
+uuid = { version = "1.18", features = ["v4"] }
 
 [lints]
 workspace = true
