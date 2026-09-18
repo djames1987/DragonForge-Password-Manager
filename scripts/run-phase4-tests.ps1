@@ -17,10 +17,18 @@ $Timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
 $LogPath = Join-Path $LogDirectory "dragonforge-phase4-$Timestamp.log"
 $HashPath = "$LogPath.sha256"
 
+function Write-RawLog {
+    param([string]$Message)
+
+    Write-Host $Message
+    Add-Content -LiteralPath $LogPath -Value $Message -Encoding UTF8
+}
+
 function Write-Log {
     param([string]$Message)
+
     $line = "[{0}] {1}" -f (Get-Date -Format "yyyy-MM-dd HH:mm:ss.fff"), $Message
-    $line | Tee-Object -FilePath $LogPath -Append
+    Write-RawLog $line
 }
 
 function Invoke-Logged {
@@ -32,11 +40,24 @@ function Invoke-Logged {
     )
 
     Write-Log "RUN: $Command $($Arguments -join ' ')"
-    & $Command @Arguments 2>&1 | ForEach-Object {
-        $_.ToString() | Tee-Object -FilePath $LogPath -Append
+
+    # Windows PowerShell 5.1 represents native stderr records as PowerShell
+    # ErrorRecord objects. With the script-wide Stop preference, normal Cargo
+    # progress output such as "Checking ..." can otherwise terminate the run.
+    # Temporarily use Continue while streaming native stdout/stderr, then decide
+    # success exclusively from the native process exit code.
+    $previousErrorActionPreference = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = "Continue"
+        & $Command @Arguments 2>&1 | ForEach-Object {
+            Write-RawLog $_.ToString()
+        }
+        $exitCode = $LASTEXITCODE
+    }
+    finally {
+        $ErrorActionPreference = $previousErrorActionPreference
     }
 
-    $exitCode = $LASTEXITCODE
     if ($null -eq $exitCode) {
         $exitCode = 0
     }
