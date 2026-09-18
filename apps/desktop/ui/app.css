@@ -258,3 +258,12 @@ input::placeholder, textarea::placeholder { color: #535c6d; }
   .sidebar-bottom .ghost-button { font-size: 0; }
   .sidebar-bottom .ghost-button::after { content: "Lock"; font-size: 11px; }
 }
+
+.sync-status-card {
+  display: grid; gap: 4px; margin: 0 0 15px; padding: 12px 13px;
+  border: 1px solid var(--border); border-radius: 10px; background: #0d1118;
+}
+.sync-status-card strong { font-size: 12px; }
+.sync-status-card span { color: var(--muted); font-size: 10px; line-height: 1.45; overflow-wrap: anywhere; }
+.sync-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.sync-conflict-actions { margin-top: 14px; }
