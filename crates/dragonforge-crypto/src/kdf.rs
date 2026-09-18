@@ -55,7 +55,7 @@ impl Default for Argon2idConfig {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 pub struct Argon2idKdf {
     config: Argon2idConfig,
 }
@@ -69,14 +69,6 @@ impl Argon2idKdf {
     #[must_use]
     pub const fn config(&self) -> Argon2idConfig {
         self.config
-    }
-}
-
-impl Default for Argon2idKdf {
-    fn default() -> Self {
-        Self {
-            config: Argon2idConfig::default(),
-        }
     }
 }
 
