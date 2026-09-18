@@ -247,7 +247,7 @@ See [docs/PHASE6_TESTING.md](docs/PHASE6_TESTING.md).
 Development/in-memory mode:
 
 ```powershell
-$env:DRAGONFORGE_SYNC_ADMIN_TOKEN = "use-a-long-random-development-token"
+$env:DRAGONFORGE_SYNC_ADMIN_TOKEN = "phase7-development-admin-token-32bytes-minimum"
 cargo run -p dragonforge-sync-server
 ```
 
