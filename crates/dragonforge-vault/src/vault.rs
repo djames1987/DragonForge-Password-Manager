@@ -129,7 +129,8 @@ impl Vault {
         let account_secret = AccountSecret::generate()?;
         let kdf_config = Argon2idConfig::default();
         let salt = generate_salt(&OsRandom, 32)?;
-        let password_key = Argon2idKdf::new(kdf_config)?.derive_key(master_password.as_bytes(), &salt)?;
+        let password_key =
+            Argon2idKdf::new(kdf_config)?.derive_key(master_password.as_bytes(), &salt)?;
         let unlock_key = derive_unlock_key(&password_key, &account_secret)?;
         let vmk = generate_secret_key(&OsRandom)?;
         let vault_id = Uuid::new_v4().to_string();
@@ -431,7 +432,9 @@ impl Vault {
 
     #[must_use]
     pub fn lock(self) -> LockedVault {
-        LockedVault { path: self.path.clone() }
+        LockedVault {
+            path: self.path.clone(),
+        }
     }
 
     fn encrypt_item(&self, item: &VaultItem, revision: u64) -> Result<EncryptedItemRecord> {
@@ -484,12 +487,11 @@ impl Vault {
     }
 }
 
-fn derive_unlock_key(password_key: &SecretKey, account_secret: &AccountSecret) -> Result<SecretKey> {
-    Ok(HkdfSha512.derive_key(
-        password_key,
-        Some(account_secret.as_bytes()),
-        UNLOCK_INFO,
-    )?)
+fn derive_unlock_key(
+    password_key: &SecretKey,
+    account_secret: &AccountSecret,
+) -> Result<SecretKey> {
+    Ok(HkdfSha512.derive_key(password_key, Some(account_secret.as_bytes()), UNLOCK_INFO)?)
 }
 
 fn vmk_context(vault_id: &str) -> String {
