@@ -3,6 +3,7 @@
 mod bridge;
 mod commands;
 mod service;
+mod sync;
 
 pub use bridge::{
     BROWSER_PROTOCOL_VERSION, BrowserAction, BrowserBridge, BrowserRequest, BrowserResponse,
@@ -12,6 +13,7 @@ pub use service::{
     AppStatus, BrowserCredential, BrowserLoginSummary, CreateVaultResponse, DesktopError,
     DesktopService, ItemDraft, ItemDto, ItemSummaryDto,
 };
+pub use sync::{SyncOutcome, SyncStatus};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -37,6 +39,11 @@ pub fn run() {
             commands::pick_existing_vault,
             commands::pick_new_vault,
             commands::pick_backup_destination,
+            commands::sync_status,
+            commands::configure_sync,
+            commands::sync_now,
+            commands::resolve_sync_conflict,
+            commands::remove_sync,
         ])
         .run(tauri::generate_context!())
         .expect("DragonForge desktop runtime failed");
