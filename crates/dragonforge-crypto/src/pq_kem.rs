@@ -1,9 +1,8 @@
 use core::fmt;
 
 use ml_kem::{
-    MlKem768,
+    KeyExport, KeyInit, MlKem768, TryKeyInit,
     kem::{Decapsulate, Encapsulate, Kem},
-    KeyExport, KeyInit, TryKeyInit,
 };
 use serde::{Deserialize, Serialize};
 use zeroize::Zeroizing;
