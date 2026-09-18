@@ -2,9 +2,9 @@
 
 ## Current status
 
-DragonForge Password Manager is under active development through **Phase 6 — Browser Extension Foundation**.
+DragonForge Password Manager is under active development through **Phase 7 — Sync Server Foundation**.
 
-The project contains working cryptographic primitives, post-quantum/hybrid components, a hardened persistent local vault, a Tauri desktop application, and a Chromium browser-extension bridge that has been manually verified on Windows with Microsoft Edge and Google Chrome. It has **not** received an independent cryptographic or application-security audit and must not yet be trusted with production credentials or other high-value secrets.
+The project contains working cryptographic primitives, post-quantum/hybrid components, a hardened persistent local vault, a Tauri desktop application, a Chromium browser-extension bridge verified on Windows with Microsoft Edge and Google Chrome, and a zero-knowledge sync-server foundation. It has **not** received an independent cryptographic or application-security audit and must not yet be trusted with production credentials or other high-value secrets.
 
 ## Core security principles
 
@@ -48,6 +48,21 @@ The project contains working cryptographic primitives, post-quantum/hybrid compo
 - Native bridge messages are size-limited and protocol-versioned.
 - The injected fill function is one-shot and does not automatically submit forms.
 
+## Sync-server security boundary
+
+- The sync server stores opaque encrypted vault bytes and does not parse vault plaintext.
+- Master passwords, Account Secrets, VMKs, item-wrap keys, and browser bridge tokens are not sync-server authentication material.
+- Sync authentication uses a separate random 256-bit bearer token.
+- Only the SHA-256 digest of the sync token is persisted.
+- Vault writes require the caller's last-known server revision.
+- Stale writes are rejected with HTTP 409 instead of overwriting newer state.
+- PostgreSQL writes lock the target vault row before revision comparison/update.
+- Synchronized payloads are limited to 64 MiB.
+- The default server bind is loopback-only.
+- Remote deployment requires HTTPS/TLS termination; Phase 7 does not include built-in TLS.
+- Account provisioning is disabled unless a server admin token is configured.
+- Server logs must not contain bearer tokens, admin tokens, or synchronized ciphertext bodies.
+
 ## Desktop-specific limitations
 
 - Decrypted item values necessarily exist in webview memory while displayed or edited. Locking clears application references but cannot prove physical erasure of every runtime copy.
@@ -69,7 +84,7 @@ The project contains working cryptographic primitives, post-quantum/hybrid compo
 
 ## Known limitations
 
-- There is no cloud sync protocol or rollback-resistant multi-device state log yet.
+- The Phase 7 sync protocol does not yet provide rollback-resistant signed multi-device history or automatic conflict merging.
 - An attacker who can replace a valid vault with an older valid copy can still cause local rollback.
 - Filesystem atomicity and durability guarantees still depend on OS/filesystem behavior.
 - Zeroization is defense in depth and cannot guarantee erasure of every historical runtime/compiler copy.
