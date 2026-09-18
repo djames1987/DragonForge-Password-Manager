@@ -112,3 +112,96 @@ fn invalid_item_drafts_are_rejected() {
 
     assert!(result.is_err());
 }
+
+
+#[test]
+fn browser_search_is_scoped_to_active_site_and_hides_passwords() {
+    let temp = tempdir().unwrap();
+    let path = temp.path().join("browser-search.dfvault");
+    let service = DesktopService::default();
+    service.create_vault(&path, MASTER).unwrap();
+
+    service
+        .save_item(&ItemDraft {
+            id: None,
+            name: "Example Account".into(),
+            kind: "login".into(),
+            favorite: true,
+            tags: vec!["browser".into()],
+            username: "alice@example.com".into(),
+            password: "example-secret".into(),
+            url: "https://www.example.com/account".into(),
+            notes: String::new(),
+        })
+        .unwrap();
+
+    service
+        .save_item(&ItemDraft {
+            id: None,
+            name: "Other Site".into(),
+            kind: "login".into(),
+            favorite: false,
+            tags: vec![],
+            username: "bob@other.test".into(),
+            password: "other-secret".into(),
+            url: "https://other.test/login".into(),
+            notes: String::new(),
+        })
+        .unwrap();
+
+    let matches = service
+        .browser_search("https://example.com/sign-in", None)
+        .unwrap();
+    assert_eq!(matches.len(), 1);
+    assert_eq!(matches[0].name, "Example Account");
+    assert_eq!(matches[0].username, "alice@example.com");
+
+    let filtered = service
+        .browser_search("https://example.com/sign-in", Some("alice"))
+        .unwrap();
+    assert_eq!(filtered.len(), 1);
+
+    let missing = service
+        .browser_search("https://example.com/sign-in", Some("bob"))
+        .unwrap();
+    assert!(missing.is_empty());
+}
+
+#[test]
+fn browser_credential_rechecks_site_before_releasing_password() {
+    let temp = tempdir().unwrap();
+    let path = temp.path().join("browser-credential.dfvault");
+    let service = DesktopService::default();
+    service.create_vault(&path, MASTER).unwrap();
+
+    let id = service
+        .save_item(&ItemDraft {
+            id: None,
+            name: "Scoped Login".into(),
+            kind: "login".into(),
+            favorite: false,
+            tags: vec![],
+            username: "scoped-user".into(),
+            password: "scoped-password".into(),
+            url: "https://login.example.com/session".into(),
+            notes: String::new(),
+        })
+        .unwrap();
+
+    let credential = service
+        .browser_credential(&id, "https://login.example.com/auth")
+        .unwrap();
+    assert_eq!(credential.username, "scoped-user");
+    assert_eq!(credential.password, "scoped-password");
+
+    assert!(
+        service
+            .browser_credential(&id, "https://evil.example.net/auth")
+            .is_err()
+    );
+    assert!(
+        service
+            .browser_credential(&id, "file:///tmp/fake-login.html")
+            .is_err()
+    );
+}
