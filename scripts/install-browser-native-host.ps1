@@ -58,7 +58,9 @@ $Manifest = [ordered]@{
     type = "stdio"
     allowed_origins = $AllowedOrigins
 }
-$Manifest | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $ManifestPath -Encoding UTF8
+$ManifestJson = $Manifest | ConvertTo-Json -Depth 4
+$Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+[System.IO.File]::WriteAllText($ManifestPath, $ManifestJson, $Utf8NoBom)
 
 if (-not [string]::IsNullOrWhiteSpace($ChromeExtensionId)) {
     $ChromeKey = "HKCU:\Software\Google\Chrome\NativeMessagingHosts\com.dragonforge.passwordmanager"
