@@ -43,13 +43,57 @@ $ManifestPath = Join-Path $InstallDir "com.dragonforge.passwordmanager.json"
 Copy-Item -Force $SourceExe $HostExe
 
 $AllowedOrigins = @()
+if (Test-Path $ManifestPath) {
+    try {
+        $ExistingManifest = Get-Content -Raw -LiteralPath $ManifestPath | ConvertFrom-Json
+        if ($null -ne $ExistingManifest.allowed_origins) {
+            $AllowedOrigins += @($ExistingManifest.allowed_origins)
+        }
+    }
+    catch {
+        Write-Warning "Existing DragonForge native host manifest could not be read; it will be replaced."
+    }
+}
 if (-not [string]::IsNullOrWhiteSpace($ChromeExtensionId)) {
     $AllowedOrigins += "chrome-extension://$ChromeExtensionId/"
 }
 if (-not [string]::IsNullOrWhiteSpace($EdgeExtensionId)) {
     $AllowedOrigins += "chrome-extension://$EdgeExtensionId/"
 }
-$AllowedOrigins = @($AllowedOrigins | Select-Object -Unique)
+$AllowedOrigins = @($AllowedOrigins | Where-Object { $_ -match '^chrome-extension://[a-p]{32}/
+$Manifest = [ordered]@{
+    name = "com.dragonforge.passwordmanager"
+    description = "DragonForge Password Manager native browser bridge"
+    path = $HostExe
+    type = "stdio"
+    allowed_origins = $AllowedOrigins
+}
+$ManifestJson = $Manifest | ConvertTo-Json -Depth 4
+$Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+[System.IO.File]::WriteAllText($ManifestPath, $ManifestJson, $Utf8NoBom)
+
+if (-not [string]::IsNullOrWhiteSpace($ChromeExtensionId)) {
+    $ChromeKey = "HKCU:\Software\Google\Chrome\NativeMessagingHosts\com.dragonforge.passwordmanager"
+    New-Item -Force -Path $ChromeKey | Out-Null
+    Set-Item -Path $ChromeKey -Value $ManifestPath
+    Write-Host "Registered DragonForge native messaging for Chrome: $ChromeExtensionId"
+}
+
+if (-not [string]::IsNullOrWhiteSpace($EdgeExtensionId)) {
+    $EdgeKey = "HKCU:\Software\Microsoft\Edge\NativeMessagingHosts\com.dragonforge.passwordmanager"
+    New-Item -Force -Path $EdgeKey | Out-Null
+    Set-Item -Path $EdgeKey -Value $ManifestPath
+    Write-Host "Registered DragonForge native messaging for Edge: $EdgeExtensionId"
+}
+
+Write-Host ""
+Write-Host "Native host installed:"
+Write-Host "  $HostExe"
+Write-Host "Manifest:"
+Write-Host "  $ManifestPath"
+Write-Host ""
+Write-Host "Restart the browser if DragonForge was already open in it."
+ } | Select-Object -Unique)
 
 $Manifest = [ordered]@{
     name = "com.dragonforge.passwordmanager"
