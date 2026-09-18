@@ -18,6 +18,10 @@ pub enum VaultError {
     UnsupportedFormatVersion(u16),
     #[error("vault item not found: {0}")]
     ItemNotFound(String),
+    #[error("refusing to overwrite existing vault: {0}")]
+    VaultAlreadyExists(PathBuf),
+    #[error("master password must not be empty")]
+    EmptyMasterPassword,
     #[error("invalid account secret length")]
     InvalidAccountSecret,
     #[error("invalid password policy: {0}")]
