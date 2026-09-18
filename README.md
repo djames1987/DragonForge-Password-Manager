@@ -2,27 +2,37 @@
 
 DragonForge Password Manager is a security-first, zero-knowledge password manager project designed for long-term cryptographic agility and post-quantum migration.
 
-> **Development status:** Phase 1 — Cryptographic Foundation
+> **Development status:** Phase 2 — Post-Quantum Cryptographic Layer
 
-## Phase 1 scope
+## Completed foundation
 
-Phase 1 establishes the reusable Rust cryptographic core that future vault, synchronization, sharing, desktop, browser, and mobile components will depend on.
+### Phase 1
 
-Implemented in this phase:
-
-- Argon2id password-based key derivation with explicit, validated parameters.
-- AES-256-GCM authenticated encryption with fresh 96-bit nonces.
-- HKDF-SHA-512 key derivation with caller-supplied domain separation.
-- Secure 256-bit secret-key type with memory zeroization on drop.
+- Argon2id password-based key derivation with validated parameters.
+- AES-256-GCM authenticated encryption with fresh nonces.
+- HKDF-SHA-512 domain-separated key derivation.
+- Secure 256-bit secret-key type with zeroization on drop.
 - OS-backed cryptographically secure random generation.
-- Constant-time byte comparison helper.
-- Versioned encrypted-envelope format with explicit cipher-suite identifier.
-- Domain-separated key wrapping and unwrapping.
-- Abstraction traits for KDF, AEAD, key derivation, and random sources.
-- Integration tests for round trips, tamper rejection, AAD binding, domain separation, and parameter validation.
-- GitHub Actions checks for formatting, Clippy, and tests.
+- Constant-time comparison helpers.
+- Versioned encrypted envelopes.
+- Domain-separated key wrapping.
+- Crypto-agility traits.
 
-Post-quantum KEMs and signatures are intentionally **not** part of Phase 1. They belong to Phase 2 so that the symmetric/password foundation can be reviewed independently.
+### Phase 2
+
+- ML-KEM-768 key generation, public-key validation, encapsulation, decapsulation, and private-seed restoration.
+- ML-DSA-65 signing, verification, public-key validation, signature parsing, and private-seed restoration.
+- X25519 + ML-KEM-768 hybrid key establishment.
+- Ephemeral X25519 sender keys.
+- Long-term recipient hybrid public keys.
+- Rejection of non-contributory X25519 exchanges.
+- HKDF-SHA-512 hybrid secret combiner.
+- Transcript binding of the recipient key, sender ephemeral key, ML-KEM ciphertext, and protocol context.
+- Serializable public/ciphertext types while keeping secret-key containers non-serializable.
+- Redacted debug output for private key containers.
+- Integration tests for successful and hostile/failure cases.
+
+The post-quantum implementation uses the current pure-Rust RustCrypto `ml-kem` and `ml-dsa` crates rather than the older unmaintained `pqcrypto-*` bindings.
 
 ## Workspace
 
@@ -30,8 +40,16 @@ Post-quantum KEMs and signatures are intentionally **not** part of Phase 1. They
 .
 ├── crates/
 │   └── dragonforge-crypto/
+│       ├── src/
+│       │   ├── pq_kem.rs
+│       │   ├── pq_sign.rs
+│       │   └── hybrid.rs
+│       └── tests/
+│           ├── foundation.rs
+│           └── post_quantum.rs
 ├── docs/
-│   └── CRYPTOGRAPHY.md
+│   ├── CRYPTOGRAPHY.md
+│   └── PHASE2_TESTING.md
 ├── .github/workflows/
 │   └── ci.yml
 ├── Cargo.toml
@@ -49,14 +67,22 @@ cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo test --workspace --all-features
 ```
 
+For Phase 2-specific tests:
+
+```bash
+cargo test -p dragonforge-crypto --test post_quantum
+```
+
+See [docs/PHASE2_TESTING.md](docs/PHASE2_TESTING.md) for the recommended local verification procedure.
+
 ## Security status
 
-This project is under active development and has **not** undergone an independent cryptographic/security audit. It should not yet be trusted with production secrets.
+This project is under active development and has **not** undergone an independent cryptographic/security audit. The upstream RustCrypto ML-KEM and ML-DSA crates also document that they have not been independently audited. DragonForge should therefore not yet be trusted with production secrets.
 
 See [SECURITY.md](SECURITY.md) and [docs/CRYPTOGRAPHY.md](docs/CRYPTOGRAPHY.md).
 
 ## Design principle
 
-DragonForge treats cryptographic agility as a core requirement. Encrypted records carry explicit version and suite identifiers, while application code depends on narrow cryptographic interfaces instead of scattering primitive-specific calls throughout the codebase.
+DragonForge treats cryptographic agility as a core requirement. Higher-level application code should depend on the narrow cryptographic APIs exposed by `dragonforge-crypto`, allowing future algorithm migrations without rewriting the vault and application layers.
 
-Future phases will add the vault key hierarchy, post-quantum/hybrid KEMs and signatures, local encrypted vault storage, synchronization, device enrollment, recovery, secure sharing, and user-facing applications.
+Future phases will build the local vault, vault key hierarchy, encrypted persistence, synchronization, device enrollment, recovery, secure sharing, and user-facing applications on top of this foundation.
