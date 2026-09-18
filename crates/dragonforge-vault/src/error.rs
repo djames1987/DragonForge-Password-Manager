@@ -16,6 +16,12 @@ pub enum VaultError {
     },
     #[error("unsupported vault format version: {0}")]
     UnsupportedFormatVersion(u16),
+    #[error("invalid vault structure: {0}")]
+    InvalidStructure(String),
+    #[error("vault resource limit exceeded: {0}")]
+    ResourceLimit(String),
+    #[error("vault item revision overflow for {0}")]
+    RevisionOverflow(String),
     #[error("vault item not found: {0}")]
     ItemNotFound(String),
     #[error("refusing to overwrite existing vault: {0}")]
