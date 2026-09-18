@@ -174,6 +174,100 @@ if ($null -ne $Endpoint) {
     }
 }
 
+
+if ($null -ne $Manifest -and $null -ne $Endpoint -and -not [string]::IsNullOrWhiteSpace($Manifest.path)) {
+    $Origins = @($Manifest.allowed_origins)
+    $Origin = $Origins | Select-Object -First 1
+
+    if (-not [string]::IsNullOrWhiteSpace($Origin)) {
+        $NativeProcess = $null
+        try {
+            $StartInfo = New-Object System.Diagnostics.ProcessStartInfo
+            $StartInfo.FileName = [string]$Manifest.path
+            $StartInfo.Arguments = '"' + [string]$Origin + '" --parent-window=0'
+            $StartInfo.UseShellExecute = $false
+            $StartInfo.RedirectStandardInput = $true
+            $StartInfo.RedirectStandardOutput = $true
+            $StartInfo.RedirectStandardError = $true
+            $StartInfo.CreateNoWindow = $true
+
+            $NativeProcess = New-Object System.Diagnostics.Process
+            $NativeProcess.StartInfo = $StartInfo
+            if (-not $NativeProcess.Start()) {
+                throw "Failed to start native-host process."
+            }
+            Pass "Native-host process launched directly with browser-style arguments."
+
+            $RequestJson = '{"version":1,"action":"status"}'
+            $Utf8 = New-Object System.Text.UTF8Encoding($false)
+            $RequestBytes = $Utf8.GetBytes($RequestJson)
+            $LengthBytes = [BitConverter]::GetBytes([uint32]$RequestBytes.Length)
+
+            $InputStream = $NativeProcess.StandardInput.BaseStream
+            $InputStream.Write($LengthBytes, 0, 4)
+            $InputStream.Write($RequestBytes, 0, $RequestBytes.Length)
+            $InputStream.Flush()
+
+            $OutputStream = $NativeProcess.StandardOutput.BaseStream
+            $Header = New-Object byte[] 4
+            $Read = 0
+            while ($Read -lt 4) {
+                $Count = $OutputStream.Read($Header, $Read, 4 - $Read)
+                if ($Count -le 0) { throw "Native host closed stdout before returning a message header." }
+                $Read += $Count
+            }
+
+            $ResponseLength = [BitConverter]::ToUInt32($Header, 0)
+            if ($ResponseLength -eq 0 -or $ResponseLength -gt 1048576) {
+                throw "Native host returned an invalid message length: $ResponseLength"
+            }
+
+            $ResponseBytes = New-Object byte[] $ResponseLength
+            $Read = 0
+            while ($Read -lt $ResponseLength) {
+                $Count = $OutputStream.Read($ResponseBytes, $Read, $ResponseLength - $Read)
+                if ($Count -le 0) { throw "Native host closed stdout before returning the full message." }
+                $Read += $Count
+            }
+
+            $NativeResponseJson = $Utf8.GetString($ResponseBytes)
+            $NativeResponse = $NativeResponseJson | ConvertFrom-Json
+            if ($NativeResponse.ok -eq $true -and $null -ne $NativeResponse.status) {
+                Pass "Native-host framed status request succeeded end-to-end."
+                Info "Native host reports vault unlocked: $($NativeResponse.status.unlocked)"
+                Info "Native host reports vault item count: $($NativeResponse.status.itemCount)"
+            }
+            else {
+                Fail "Native host returned an error response: $NativeResponseJson"
+            }
+
+            $NativeProcess.StandardInput.Close()
+            if (-not $NativeProcess.WaitForExit(2000)) {
+                $NativeProcess.Kill()
+            }
+
+            $Stderr = $NativeProcess.StandardError.ReadToEnd()
+            if (-not [string]::IsNullOrWhiteSpace($Stderr)) {
+                Info "Native host stderr: $Stderr"
+            }
+        }
+        catch {
+            $Stderr = ""
+            if ($null -ne $NativeProcess) {
+                try { $Stderr = $NativeProcess.StandardError.ReadToEnd() } catch {}
+                try { if (-not $NativeProcess.HasExited) { $NativeProcess.Kill() } } catch {}
+            }
+            Fail "Native-host end-to-end framing test failed: $($_.Exception.Message)"
+            if (-not [string]::IsNullOrWhiteSpace($Stderr)) {
+                Info "Native host stderr: $Stderr"
+            }
+        }
+        finally {
+            if ($null -ne $NativeProcess) { $NativeProcess.Dispose() }
+        }
+    }
+}
+
 Write-Host ""
 if ($Failed) {
     Write-Host "DRAGONFORGE BROWSER INTEGRATION DIAGNOSTIC: FAIL" -ForegroundColor Red
