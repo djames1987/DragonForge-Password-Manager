@@ -53,3 +53,6 @@ jobs:
 
       - name: Release workspace tests
         run: cargo test --workspace --all-features --release
+
+      - name: Desktop release build
+        run: cargo build -p dragonforge-desktop --release
