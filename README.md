@@ -2,7 +2,7 @@
 
 DragonForge Password Manager is a security-first, zero-knowledge password manager project designed for long-term cryptographic agility and post-quantum migration.
 
-> **Development status:** Phase 5 — Desktop Application Foundation
+> **Development status:** Phase 6 — Browser Extension Foundation
 
 ## Completed phases
 
@@ -72,6 +72,22 @@ DragonForge Password Manager is a security-first, zero-knowledge password manage
 - Desktop service integration tests cover create/unlock/CRUD/search/password generation/backup.
 - CI builds and tests the desktop app with the rest of the workspace.
 
+### Phase 6 — Browser Extension Foundation
+
+- Chromium Manifest V3 extension for Google Chrome and Microsoft Edge.
+- Modern popup UI that shows only site-matching login summaries.
+- No broad host permissions and no persistent content scripts.
+- Explicit Fill action required before a password is requested.
+- Passwords are never returned by background search results.
+- One-shot `chrome.scripting` injection fills visible login fields without submitting forms.
+- Rust native-messaging host using browser-standard length-prefixed JSON.
+- Authenticated loopback bridge from the native host to the running desktop app.
+- Fresh 256-bit bridge token generated on every desktop launch.
+- Desktop-side site scoping and second host check before credential release.
+- Master password, Account Secret, VMK, and item-wrap key never enter the extension.
+- Windows native-host registration scripts for Chrome and Edge.
+- Browser extension packaging script, static/unit tests, and Phase 6 uploadable-log runner.
+
 The post-quantum implementation uses the pure-Rust RustCrypto `ml-kem` and `ml-dsa` crates rather than the older unmaintained `pqcrypto-*` bindings.
 
 ## Workspace
@@ -79,7 +95,11 @@ The post-quantum implementation uses the pure-Rust RustCrypto `ml-kem` and `ml-d
 ```text
 .
 ├── apps/
-│   └── desktop/
+│   ├── desktop/
+│   │   ├── src/
+│   │   ├── tests/
+│   │   └── ui/
+│   └── browser-extension/
 │       ├── src/
 │       ├── tests/
 │       └── ui/
@@ -93,12 +113,17 @@ The post-quantum implementation uses the pure-Rust RustCrypto `ml-kem` and `ml-d
 │   ├── PHASE4_TESTING.md
 │   ├── PHASE5_DESKTOP.md
 │   ├── PHASE5_TESTING.md
+│   ├── PHASE6_BROWSER.md
+│   ├── PHASE6_TESTING.md
 │   └── VAULT_FORMAT.md
 ├── scripts/
 │   ├── run-phase4-tests.cmd
 │   ├── run-phase4-tests.ps1
 │   ├── run-phase5-tests.cmd
-│   └── run-phase5-tests.ps1
+│   ├── run-phase5-tests.ps1
+│   ├── run-phase6-tests.cmd
+│   ├── run-phase6-tests.ps1
+│   └── install-browser-native-host.ps1
 └── .github/workflows/ci.yml
 ```
 
@@ -154,3 +179,33 @@ cargo build -p dragonforge-desktop --release
 DragonForge is still under active development and has **not** undergone an independent cryptographic or application-security audit. It should not yet be trusted with production credentials or other high-value secrets.
 
 See [SECURITY.md](SECURITY.md), [docs/CRYPTOGRAPHY.md](docs/CRYPTOGRAPHY.md), and [docs/VAULT_FORMAT.md](docs/VAULT_FORMAT.md).
+
+
+## Browser extension development
+
+Load `apps/browser-extension` as an unpacked extension in Chrome or Edge. Then register the native host using the extension ID shown by the browser:
+
+```powershell
+.\scripts\install-browser-native-host.ps1 -EdgeExtensionId <ID>
+```
+
+For Chrome, use `-ChromeExtensionId`.
+
+The desktop application must be running and the vault must be unlocked before browser credentials can be searched or filled.
+
+See [docs/PHASE6_BROWSER.md](docs/PHASE6_BROWSER.md) for the security architecture.
+
+## Automated Phase 6 verification
+
+```powershell
+.\scripts\run-phase6-tests.ps1
+```
+
+The runner creates:
+
+```text
+test-logs\dragonforge-phase6-YYYYMMDD-HHMMSS.log
+test-logs\dragonforge-phase6-YYYYMMDD-HHMMSS.log.sha256
+```
+
+See [docs/PHASE6_TESTING.md](docs/PHASE6_TESTING.md).
