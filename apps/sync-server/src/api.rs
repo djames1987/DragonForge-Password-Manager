@@ -45,7 +45,10 @@ pub fn build_router(state: AppState) -> Router {
         .route("/v1/accounts", post(create_account))
         .route("/v1/vaults/{vault_id}", get(get_vault).put(put_vault))
         .layer(RequestBodyLimitLayer::new(MAX_SYNC_BLOB_BYTES + 64 * 1024))
-        .layer(TimeoutLayer::new(Duration::from_secs(30)))
+        .layer(TimeoutLayer::with_status_code(
+            StatusCode::REQUEST_TIMEOUT,
+            Duration::from_secs(30),
+        ))
         .with_state(state)
 }
 
