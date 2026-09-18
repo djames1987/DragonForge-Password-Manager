@@ -126,6 +126,12 @@ impl Vault {
         master_password: &str,
     ) -> Result<(Self, AccountSecret)> {
         let path = path.into();
+        if path.exists() {
+            return Err(VaultError::VaultAlreadyExists(path));
+        }
+        if master_password.is_empty() {
+            return Err(VaultError::EmptyMasterPassword);
+        }
         let account_secret = AccountSecret::generate()?;
         let kdf_config = Argon2idConfig::default();
         let salt = generate_salt(&OsRandom, 32)?;
@@ -175,6 +181,9 @@ impl Vault {
         account_secret: &AccountSecret,
     ) -> Result<Self> {
         let path = path.into();
+        if master_password.is_empty() {
+            return Err(VaultError::EmptyMasterPassword);
+        }
         let bytes = read_file(&path)?;
         let file: VaultFile = serde_json::from_slice(&bytes)?;
         if file.version != VAULT_FORMAT_VERSION {
@@ -316,7 +325,8 @@ impl Vault {
             created_at: old.created_at,
             updated_at: now,
         };
-        self.file.items[position] = self.encrypt_item(&item, revision)?;
+        let encrypted = self.encrypt_item(&item, revision)?;
+        self.file.items[position] = encrypted;
         self.file.updated_at = now;
         self.save()
     }
@@ -376,6 +386,9 @@ impl Vault {
         new_master_password: &str,
         account_secret: &AccountSecret,
     ) -> Result<()> {
+        if new_master_password.is_empty() {
+            return Err(VaultError::EmptyMasterPassword);
+        }
         let config = Argon2idConfig::default();
         let salt = generate_salt(&OsRandom, 32)?;
         let password_key =
@@ -410,19 +423,18 @@ impl Vault {
         account_secret: &AccountSecret,
     ) -> Result<Self> {
         let source = source.as_ref();
-        let bytes = read_file(source)?;
-        let temporary = destination.into();
-        atomic_write(&temporary, &bytes)?;
-        match Self::open(&temporary, master_password, account_secret) {
-            Ok(vault) => {
-                vault.verify_integrity()?;
-                Ok(vault)
-            }
-            Err(error) => {
-                let _ = std::fs::remove_file(&temporary);
-                Err(error)
-            }
+        let destination = destination.into();
+        if destination.exists() {
+            return Err(VaultError::VaultAlreadyExists(destination));
         }
+
+        let source_vault = Self::open(source, master_password, account_secret)?;
+        source_vault.verify_integrity()?;
+        drop(source_vault);
+
+        let bytes = read_file(source)?;
+        atomic_write(&destination, &bytes)?;
+        Self::open(destination, master_password, account_secret)
     }
 
     pub fn save(&self) -> Result<()> {
