@@ -9,7 +9,6 @@ use std::{
 
 use rand_core::{OsRng, RngCore};
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 
 use crate::{BrowserCredential, BrowserLoginSummary, DesktopError, DesktopService};
 
@@ -314,8 +313,9 @@ pub fn forward_native_request(request: &BrowserRequest) -> BrowserResponse {
     }
     response.pop();
 
-    serde_json::from_slice(&response)
-        .unwrap_or_else(|_| BrowserResponse::error("protocolError", "invalid DragonForge desktop response"))
+    serde_json::from_slice(&response).unwrap_or_else(|_| {
+        BrowserResponse::error("protocolError", "invalid DragonForge desktop response")
+    })
 }
 
 fn handle_bridge_stream(mut stream: TcpStream, service: &DesktopService, expected_token: &str) {
@@ -332,10 +332,7 @@ fn handle_bridge_stream(mut stream: TcpStream, service: &DesktopService, expecte
         .by_ref()
         .take((MAX_BRIDGE_MESSAGE_BYTES + 1) as u64)
         .read_until(b'\n', &mut request);
-    if read.is_err()
-        || request.len() > MAX_BRIDGE_MESSAGE_BYTES
-        || !request.ends_with(b"\n")
-    {
+    if read.is_err() || request.len() > MAX_BRIDGE_MESSAGE_BYTES || !request.ends_with(b"\n") {
         let _ = write_bridge_response(
             &mut stream,
             &BrowserResponse::error("protocolError", "invalid bridge request"),
@@ -370,7 +367,10 @@ fn handle_bridge_stream(mut stream: TcpStream, service: &DesktopService, expecte
 
 fn handle_browser_request(service: &DesktopService, request: BrowserRequest) -> BrowserResponse {
     if request.version != BROWSER_PROTOCOL_VERSION {
-        return BrowserResponse::error("unsupportedVersion", "unsupported browser protocol version");
+        return BrowserResponse::error(
+            "unsupportedVersion",
+            "unsupported browser protocol version",
+        );
     }
 
     match request.action {
@@ -400,9 +400,10 @@ fn map_desktop_error(error: DesktopError) -> BrowserResponse {
             "Unlock DragonForge Password Manager to use browser filling",
         ),
         DesktopError::InvalidInput(message) => BrowserResponse::error("invalidRequest", message),
-        DesktopError::StateUnavailable => {
-            BrowserResponse::error("desktopUnavailable", "DragonForge desktop state is unavailable")
-        }
+        DesktopError::StateUnavailable => BrowserResponse::error(
+            "desktopUnavailable",
+            "DragonForge desktop state is unavailable",
+        )
         DesktopError::Vault(error) => BrowserResponse::error("vaultError", error.to_string()),
         DesktopError::InvalidAccountSecret => {
             BrowserResponse::error("invalidRequest", "invalid Account Secret")
@@ -411,8 +412,8 @@ fn map_desktop_error(error: DesktopError) -> BrowserResponse {
 }
 
 fn write_bridge_response(stream: &mut TcpStream, response: &BrowserResponse) -> io::Result<()> {
-    let mut encoded =
-        serde_json::to_vec(response).map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
+    let mut encoded = serde_json::to_vec(response)
+        .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
     if encoded.len() > MAX_BRIDGE_MESSAGE_BYTES {
         encoded = serde_json::to_vec(&BrowserResponse::error(
             "responseTooLarge",
@@ -439,7 +440,9 @@ fn tokens_equal(left: &str, right: &str) -> bool {
     left.as_bytes()
         .iter()
         .zip(right.as_bytes())
-        .fold(0_u8, |difference, (left, right)| difference | (left ^ right))
+        .fold(0_u8, |difference, (left, right)| {
+            difference | (left ^ right)
+        })
         == 0
 }
 
@@ -448,8 +451,8 @@ fn write_endpoint(path: &Path, endpoint: &BridgeEndpoint) -> io::Result<()> {
         fs::create_dir_all(parent)?;
     }
 
-    let bytes =
-        serde_json::to_vec(endpoint).map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
+    let bytes = serde_json::to_vec(endpoint)
+        .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
 
     let mut options = OpenOptions::new();
     options.create(true).truncate(true).write(true);
