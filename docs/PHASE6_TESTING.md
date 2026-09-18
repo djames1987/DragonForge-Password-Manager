@@ -30,14 +30,15 @@ These verify Manifest V3, exact permissions, lack of broad host permissions/cont
 3. Open `chrome://extensions`, enable Developer mode, and choose **Load unpacked**.
 4. Select `apps/browser-extension` and copy its extension ID.
 5. Run `.\scripts\install-browser-native-host.ps1 -ChromeExtensionId <ID>`.
-6. Restart Chrome.
-7. Visit the saved website, open DragonForge, and confirm the login appears without revealing its password.
-8. Click **Fill** and confirm username/password fields are populated without submitting the form.
-9. Lock DragonForge and confirm the extension reports the vault as locked.
+6. While DragonForge is running and unlocked, run `.\scripts\test-browser-native-host.ps1 -Browser Chrome -ExtensionId <ID>` and require a PASS result.
+7. Restart Chrome.
+8. Visit the saved website, open DragonForge, and confirm the login appears without revealing its password.
+9. Click **Fill** and confirm username/password fields are populated without submitting the form.
+10. Lock DragonForge and confirm the extension reports the vault as locked.
 
 ## Manual Edge test
 
-Repeat with `edge://extensions` and `.\scripts\install-browser-native-host.ps1 -EdgeExtensionId <ID>`.
+Repeat with `edge://extensions`, `.\scripts\install-browser-native-host.ps1 -EdgeExtensionId <ID>`, and `.\scripts\test-browser-native-host.ps1 -Browser Edge -ExtensionId <ID>`.
 
 ## Security negative tests
 
