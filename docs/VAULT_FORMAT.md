@@ -1,14 +1,10 @@
-# Phase 3 Vault Format
+# DragonForge Vault Format — Phase 4 Hardening
 
-## Purpose
+## Current format
 
-The Phase 3 `.dfvault` file is the first persistent DragonForge vault format. It is designed for local correctness, authenticated encryption, testability, and future migration.
+The persistent `.dfvault` format remains **version 1**. Phase 4 hardens parsing, validation, persistence, and migration readiness without silently changing the cryptographic meaning of version 1.
 
-The current format version is `1`.
-
-## High-level file structure
-
-The serialized file contains:
+## File structure
 
 ```text
 version
@@ -36,93 +32,79 @@ items[]:
     envelope...
 ```
 
-Item titles, credentials, URLs, notes, tags, and favorite state are not stored in plaintext.
+Sensitive item fields remain inside authenticated ciphertext.
 
-## Unlock material
+## Phase 4 defensive limits
 
-A vault needs two user-controlled inputs:
+Before expensive cryptographic work, DragonForge enforces:
 
-1. the master password;
-2. the 32-byte Account Secret created alongside the vault.
+- vault file: at most 64 MiB
+- vault items: at most 100,000
+- encrypted item payload: at most 1 MiB
+- KDF salt: at most 64 bytes and at least the cryptographic minimum
+- Argon2 memory: at most 1 GiB
+- Argon2 iterations: at most 20
+- Argon2 lanes: at most 16
+- wrapped 256-bit key ciphertext: exactly 48 bytes for the current AES-256-GCM envelope
+- encrypted payload ciphertext: at least one authentication tag in length
 
-The Account Secret is **not stored in the vault file**.
+These are defensive implementation limits and can be migrated explicitly in future format/application versions.
 
-Losing both the Account Secret and every external copy of it makes the vault unrecoverable by design.
+## Structural validation
 
-## Key hierarchy
+Before Argon2 derivation and VMK unwrap, Phase 4 validates:
 
-```text
-Master Password
-  │
-  └─ Argon2id + vault salt
-        │
-        ▼
-   Password Key
-        │
-        └─ HKDF-SHA-512 + Account Secret
-              │
-              ▼
-          Unlock Key
-              │
-              └─ unwraps VMK
-                    │
-                    └─ HKDF-SHA-512
-                          │
-                          ▼
-                    Item-Wrap Key
-                          │
-                          ├─ unwrap Item Key 1 -> decrypt Item 1
-                          ├─ unwrap Item Key 2 -> decrypt Item 2
-                          └─ ...
-```
+- supported vault format version
+- valid vault UUID
+- vault timestamp ordering
+- KDF salt and parameter bounds
+- wrapped VMK envelope version and ciphertext length
+- item-count bound
+- valid item UUIDs
+- unique item IDs
+- revision greater than zero
+- item timestamp ordering
+- wrapped item-key envelope shape
+- encrypted payload envelope version and size
 
-## Record revisions
+A malformed file therefore cannot freely drive expensive Argon2 parameters.
 
-New records start at revision 1.
+## Revisions
 
-An update increments the revision and re-encrypts the payload using a fresh random item key. The revision is included in payload AAD, so changing the revision without creating matching ciphertext invalidates authentication.
+New records begin at revision 1. Updates use checked arithmetic; an impossible `u64` revision overflow is rejected rather than wrapping or saturating.
 
-## Search
+The revision remains part of payload AAD.
 
-There is no plaintext index.
+## Persistence
 
-Once the vault is unlocked, search decrypts records locally and matches against:
+The save sequence is:
 
-- title/name
-- tags
-- login username
-- login URL
-- login notes
-- secure-note text
+1. serialize and validate the complete new vault;
+2. write a same-directory temporary file;
+3. synchronize the temporary file;
+4. move the previous live file to the backup path when present;
+5. synchronize the parent directory on Unix;
+6. move the temporary file into the live path;
+7. synchronize the parent directory on Unix;
+8. remove the backup after success.
 
-Passwords are intentionally not searched.
+If the live vault is missing but the backup exists, the backup is restored before reading.
 
-## Persistence and recovery
+An orphan temporary file alone is never promoted automatically.
 
-Mutating operations save automatically.
+## Version inspection and migration readiness
 
-The write path:
+`inspect_vault_file` reports:
 
-1. writes the complete new serialized vault to a same-directory temporary file;
-2. synchronizes the temporary file;
-3. renames the old vault to a backup name when present;
-4. renames the temporary file into the live path;
-5. removes the temporary backup after success.
+- format version
+- item count
+- file size
+- migration status
 
-If the live file is absent and a backup exists, the read path restores the backup.
+For version 1, migration status is `Current`.
 
-This is a crash-recovery mechanism for Phase 3, not a transactional multi-writer design.
+Unknown/future versions are rejected. Because DragonForge has no pre-v1 persistent format, Phase 4 does not contain a synthetic migration. Future migrations must be explicit transforms rather than reinterpretation of existing fields.
 
-## Backups
+## Remaining rollback limitation
 
-A backup is an encrypted copy of the current vault representation.
-
-It does not contain the Account Secret.
-
-Import validates the source credentials and decrypts all item records before creating the destination copy.
-
-## Format migration
-
-Code must reject unknown vault format versions.
-
-Future phases should add explicit migration functions rather than changing the meaning of version 1 fields in place.
+Authentication detects modification, but a complete older valid copy is still cryptographically valid. Local rollback detection requires an external monotonic state anchor or synchronized signed state and remains a later-phase feature.
