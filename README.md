@@ -2,7 +2,7 @@
 
 DragonForge Password Manager is a security-first, zero-knowledge password manager project designed for long-term cryptographic agility and post-quantum migration.
 
-> **Development status:** Phase 3 — Local Encrypted Vault
+> **Development status:** Phase 4 — Secure Storage Architecture / Vault Hardening
 
 ## Completed phases
 
@@ -30,28 +30,35 @@ DragonForge Password Manager is a security-first, zero-knowledge password manage
 
 ### Phase 3 — Local Encrypted Vault
 
-- New `dragonforge-vault` crate separated from the primitive crypto layer.
 - Random 256-bit Vault Master Key (VMK).
 - Master password + external 256-bit Account Secret unlock model.
-- Argon2id password derivation followed by HKDF-SHA-512 account-secret binding.
-- VMK wrapping under the derived unlock key.
-- HKDF-derived item-wrapping key from the VMK.
-- Per-item random 256-bit data-encryption keys.
-- AES-256-GCM encryption for each item payload.
-- Per-item key wrapping underneath the vault item-wrap key.
-- Authenticated item identity/revision binding through AAD.
-- Login and secure-note records.
-- Encrypted names, usernames, passwords, URLs, notes, and tags.
-- Local decrypt-then-search behavior; no plaintext search index.
-- Add, read, update, delete, list, and search APIs.
-- Automatic persistence after mutations.
-- Master-password changes by rewrapping the VMK rather than re-encrypting every item.
-- Lock/unlock flow.
-- Password generator using OS CSPRNG and unbiased rejection sampling.
-- Encrypted backup export/import with credential and integrity validation.
-- Crash-recoverable temp/backup file replacement.
-- Refusal to silently overwrite an existing vault.
-- Ciphertext tamper detection and full-vault integrity verification.
+- Per-item random encryption keys and encrypted login/secure-note payloads.
+- Encrypted titles, usernames, passwords, URLs, notes, and tags.
+- Local decrypt-then-search behavior.
+- CRUD, lock/unlock, password changes, password generation, and encrypted backup/import.
+- Authenticated record identity/revision binding and tamper detection.
+
+### Phase 4 — Secure Storage Architecture / Vault Hardening
+
+- Defensive maximum vault-file size.
+- Defensive maximum item count and per-item ciphertext size.
+- Upper bounds on attacker-controlled Argon2 memory, iterations, lanes, and salt size.
+- Structural validation before expensive password derivation or decryption.
+- Vault/item UUID validation.
+- Duplicate item-ID rejection.
+- Zero-revision and revision-overflow rejection.
+- Wrapped-key and encrypted-payload envelope-length validation.
+- Timestamp-order validation.
+- Version inspection API and explicit migration-status scaffolding.
+- Current-format rejection of unknown/future versions.
+- Hardened atomic writes with parent-directory synchronization on Unix.
+- Recovery from the last complete backup if the live file is missing.
+- Refusal to promote orphan temporary files as valid vaults.
+- Adversarial serialized-vault mutation tests.
+- 100-item encrypted storage/search stress test.
+- 50-consecutive-update revision stress test.
+- Automated Windows verification script with timestamped uploadable logs.
+- CI now runs debug workspace tests, Phase 4 hardening serially, and optimized release tests.
 
 The post-quantum implementation uses the pure-Rust RustCrypto `ml-kem` and `ml-dsa` crates rather than the older unmaintained `pqcrypto-*` bindings.
 
@@ -61,59 +68,67 @@ The post-quantum implementation uses the pure-Rust RustCrypto `ml-kem` and `ml-d
 .
 ├── crates/
 │   ├── dragonforge-crypto/
-│   │   ├── src/
-│   │   └── tests/
 │   └── dragonforge-vault/
 │       ├── src/
 │       │   ├── error.rs
-│       │   ├── lib.rs
+│       │   ├── format.rs
+│       │   ├── limits.rs
 │       │   ├── model.rs
 │       │   ├── password.rs
 │       │   ├── storage.rs
 │       │   └── vault.rs
 │       └── tests/
+│           ├── hardening.rs
 │           └── local_vault.rs
+├── scripts/
+│   ├── run-phase4-tests.cmd
+│   └── run-phase4-tests.ps1
 ├── docs/
 │   ├── CRYPTOGRAPHY.md
 │   ├── PHASE2_TESTING.md
 │   ├── PHASE3_TESTING.md
+│   ├── PHASE4_TESTING.md
 │   └── VAULT_FORMAT.md
-├── .github/workflows/
-│   └── ci.yml
-├── Cargo.toml
-├── SECURITY.md
-└── README.md
+└── .github/workflows/ci.yml
 ```
 
-## Build and test
+## Automated Windows verification
 
-Install a current stable Rust toolchain, then run:
+After pulling the repository, run:
+
+```powershell
+.\scripts\run-phase4-tests.ps1
+```
+
+or double-click/run:
+
+```text
+scripts\run-phase4-tests.cmd
+```
+
+The script runs all noninteractive quality gates and tests, repeats the Phase 4 hardening suite three times by default, runs release-mode tests, and creates:
+
+```text
+test-logs\dragonforge-phase4-YYYYMMDD-HHMMSS.log
+test-logs\dragonforge-phase4-YYYYMMDD-HHMMSS.log.sha256
+```
+
+Upload the `.log` file when you want the results reviewed.
+
+See [docs/PHASE4_TESTING.md](docs/PHASE4_TESTING.md).
+
+## Manual commands
 
 ```bash
 cargo fmt --all --check
 cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo test --workspace --all-features
+cargo test -p dragonforge-vault --test hardening -- --test-threads=1
 cargo test --workspace --all-features --release
 ```
-
-Phase-specific suites:
-
-```bash
-cargo test -p dragonforge-crypto --test foundation
-cargo test -p dragonforge-crypto --test post_quantum
-cargo test -p dragonforge-vault --test local_vault
-```
-
-See [docs/PHASE3_TESTING.md](docs/PHASE3_TESTING.md) for the recommended Windows/local verification procedure and [docs/VAULT_FORMAT.md](docs/VAULT_FORMAT.md) for the Phase 3 key hierarchy and file format.
 
 ## Security status
 
 DragonForge is still under active development and has **not** undergone an independent cryptographic or application-security audit. It should not yet be trusted with production credentials or other high-value secrets.
 
-See [SECURITY.md](SECURITY.md) and [docs/CRYPTOGRAPHY.md](docs/CRYPTOGRAPHY.md).
-
-## Design principle
-
-The primitive cryptography and the vault/application layer are deliberately separated. The vault crate consumes narrow APIs from `dragonforge-crypto`, which keeps future algorithm migrations and independent reviews tractable.
-
-Future phases will add richer item types, attachments/TOTP, desktop applications, browser integration, synchronization, device enrollment, recovery, secure sharing, and user-facing security controls.
+See [SECURITY.md](SECURITY.md), [docs/CRYPTOGRAPHY.md](docs/CRYPTOGRAPHY.md), and [docs/VAULT_FORMAT.md](docs/VAULT_FORMAT.md).
