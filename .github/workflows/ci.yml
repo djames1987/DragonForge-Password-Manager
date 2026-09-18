@@ -54,8 +54,9 @@ jobs:
       - name: Clippy
         run: cargo clippy --workspace --all-targets --all-features -- -D warnings
 
-      - name: Browser extension syntax
+      - name: Desktop and browser JavaScript syntax
         run: |
+          node --check apps/desktop/ui/app.js
           node --check apps/browser-extension/src/core.js
           node --check apps/browser-extension/src/background.js
           node --check apps/browser-extension/ui/popup.js
