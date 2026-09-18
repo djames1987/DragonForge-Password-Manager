@@ -97,7 +97,8 @@ try {
     Invoke-Logged cargo "fmt" "--all" "--check"
     Invoke-Logged cargo "clippy" "--workspace" "--all-targets" "--all-features" "--" "-D" "warnings"
 
-    Write-Log "=== Browser extension regression ==="
+    Write-Log "=== Desktop and browser JavaScript regression ==="
+    Invoke-Logged node "--check" "apps/desktop/ui/app.js"
     Invoke-Logged node "--check" "apps/browser-extension/src/core.js"
     Invoke-Logged node "--check" "apps/browser-extension/src/background.js"
     Invoke-Logged node "--check" "apps/browser-extension/ui/popup.js"
