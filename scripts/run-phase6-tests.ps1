@@ -66,6 +66,31 @@ try {
     Invoke-Logged cargo "--version"
     Invoke-Logged node "--version"
 
+    Write-Log "=== PowerShell browser integration syntax ==="
+    $PowerShellFiles = @(
+        "scripts/install-browser-native-host.ps1",
+        "scripts/uninstall-browser-native-host.ps1",
+        "scripts/test-browser-native-host.ps1",
+        "scripts/run-phase6-tests.ps1"
+    )
+    foreach ($PowerShellFile in $PowerShellFiles) {
+        $Tokens = $null
+        $ParseErrors = $null
+        [System.Management.Automation.Language.Parser]::ParseFile(
+            (Resolve-Path $PowerShellFile),
+            [ref]$Tokens,
+            [ref]$ParseErrors
+        ) | Out-Null
+
+        if ($ParseErrors.Count -gt 0) {
+            foreach ($ParseError in $ParseErrors) {
+                Write-Log ("PowerShell parse error in {0}: {1}" -f $PowerShellFile, $ParseError.Message)
+            }
+            throw "PowerShell browser integration script syntax validation failed."
+        }
+        Write-Log "PASS: PowerShell syntax $PowerShellFile"
+    }
+
     Write-Log "=== Rust quality gates ==="
     Invoke-Logged cargo "fmt" "--all" "--check"
     Invoke-Logged cargo "clippy" "--workspace" "--all-targets" "--all-features" "--" "-D" "warnings"
