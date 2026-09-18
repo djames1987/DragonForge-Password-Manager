@@ -62,6 +62,9 @@ jobs:
       - name: Debug workspace tests
         run: cargo test --workspace --all-features
 
+      - name: Phase 7 sync server API tests
+        run: cargo test -p dragonforge-sync-server --test sync_api -- --nocapture
+
       - name: Phase 4 hardening tests serially
         run: cargo test -p dragonforge-vault --test hardening -- --test-threads=1
 
@@ -73,6 +76,9 @@ jobs:
 
       - name: Native host release build
         run: cargo build -p dragonforge-desktop --release --bin dragonforge-native-host
+
+      - name: Sync server release build
+        run: cargo build -p dragonforge-sync-server --features postgres --release
 
   windows-desktop:
     name: Windows desktop build
@@ -96,7 +102,8 @@ jobs:
             'scripts/install-browser-native-host.ps1',
             'scripts/uninstall-browser-native-host.ps1',
             'scripts/test-browser-native-host.ps1',
-            'scripts/run-phase6-tests.ps1'
+            'scripts/run-phase6-tests.ps1',
+            'scripts/run-phase7-tests.ps1'
           )
           foreach ($file in $files) {
             $tokens = $null
@@ -117,6 +124,12 @@ jobs:
       - name: Check desktop crate
         run: cargo check -p dragonforge-desktop --all-targets
 
+      - name: Check sync server with PostgreSQL
+        run: cargo check -p dragonforge-sync-server --features postgres --all-targets
+
+      - name: Run sync server API tests
+        run: cargo test -p dragonforge-sync-server --test sync_api -- --nocapture
+
       - name: Run desktop service tests
         run: cargo test -p dragonforge-desktop --test desktop_service -- --nocapture
 
@@ -125,3 +138,6 @@ jobs:
 
       - name: Build Windows native messaging host
         run: cargo build -p dragonforge-desktop --release --bin dragonforge-native-host
+
+      - name: Build Windows sync server
+        run: cargo build -p dragonforge-sync-server --features postgres --release
