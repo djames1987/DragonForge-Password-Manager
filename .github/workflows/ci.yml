@@ -66,6 +66,9 @@ jobs:
       - name: Debug workspace tests
         run: cargo test --workspace --all-features
 
+      - name: Phase 8 multi-device sync tests
+        run: cargo test -p dragonforge-desktop --test multi_device_sync -- --nocapture
+
       - name: Phase 7 sync server API tests
         run: cargo test -p dragonforge-sync-server --test sync_api -- --nocapture
 
@@ -107,7 +110,8 @@ jobs:
             'scripts/uninstall-browser-native-host.ps1',
             'scripts/test-browser-native-host.ps1',
             'scripts/run-phase6-tests.ps1',
-            'scripts/run-phase7-tests.ps1'
+            'scripts/run-phase7-tests.ps1',
+            'scripts/run-phase8-tests.ps1'
           )
           foreach ($file in $files) {
             $tokens = $null
@@ -133,6 +137,9 @@ jobs:
 
       - name: Run sync server API tests
         run: cargo test -p dragonforge-sync-server --test sync_api -- --nocapture
+
+      - name: Run Phase 8 multi-device sync tests
+        run: cargo test -p dragonforge-desktop --test multi_device_sync -- --nocapture
 
       - name: Run desktop service tests
         run: cargo test -p dragonforge-desktop --test desktop_service -- --nocapture
