@@ -227,7 +227,8 @@ mod postgres {
                     }
 
                     let next_revision = current.checked_add(1).ok_or(StoreError::Internal)?;
-                    let revision_i64 = i64::try_from(next_revision).map_err(|_| StoreError::Internal)?;
+                    let revision_i64 =
+                        i64::try_from(next_revision).map_err(|_| StoreError::Internal)?;
 
                     sqlx::query(
                         "UPDATE sync_vaults SET revision = $3, content_sha256 = $4,                          ciphertext = $5, updated_at = NOW()                          WHERE account_id = $1 AND vault_id = $2",
