@@ -69,6 +69,7 @@
   }
 
   function showWelcome() {
+    scrubSensitiveUi();
     vaultView.classList.add("hidden");
     welcomeView.classList.remove("hidden");
     showAuthPanel(null);
@@ -76,6 +77,37 @@
     state.items = [];
     state.selectedId = null;
     state.selectedItem = null;
+  }
+
+  function scrubSensitiveUi() {
+    state.selectedItem = null;
+    state.passwordVisible = false;
+
+    for (const id of [
+      "detail-username",
+      "detail-password",
+      "detail-url",
+      "detail-notes",
+      "item-username",
+      "item-password",
+      "item-url",
+      "item-notes",
+      "settings-password",
+      "settings-password-confirm",
+      "settings-secret",
+      "recovery-secret"
+    ]) {
+      const node = $(id);
+      if (!node) continue;
+      if ("value" in node) node.value = "";
+      else node.textContent = "";
+    }
+
+    for (const id of ["item-modal", "settings-modal", "recovery-modal"]) {
+      $(id)?.classList.add("hidden");
+    }
+
+    renderDetail();
   }
 
   function clearUnlockInputs() {
