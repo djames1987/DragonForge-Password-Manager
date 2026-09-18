@@ -565,7 +565,25 @@ fn save_config(vault_path: &Path, config: &SyncConfig) -> Result<(), SyncError> 
         .map_err(|error| SyncError::Io(error.to_string()))?;
     file.sync_all()
         .map_err(|error| SyncError::Io(error.to_string()))?;
-    fs::rename(&temp, &path).map_err(|error| SyncError::Io(error.to_string()))
+    let backup = path.with_extension("json.bak");
+    if backup.exists() {
+        fs::remove_file(&backup).map_err(|error| SyncError::Io(error.to_string()))?;
+    }
+
+    if path.exists() {
+        fs::rename(&path, &backup).map_err(|error| SyncError::Io(error.to_string()))?;
+    }
+
+    if let Err(error) = fs::rename(&temp, &path) {
+        let _ = fs::rename(&backup, &path);
+        return Err(SyncError::Io(error.to_string()));
+    }
+
+    if backup.exists() {
+        fs::remove_file(&backup).map_err(|error| SyncError::Io(error.to_string()))?;
+    }
+
+    Ok(())
 }
 
 fn replace_file_atomically(path: &Path, bytes: &[u8]) -> Result<(), SyncError> {
