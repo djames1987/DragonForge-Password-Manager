@@ -24,6 +24,7 @@ thiserror = "2.0"
 tokio = { version = "1.47", features = ["macros", "rt-multi-thread", "net", "signal"] }
 tower-http = { version = "0.6", features = ["limit", "timeout"] }
 uuid = { version = "1.18", features = ["v4", "serde"] }
+zeroize = { version = "1.8", features = ["zeroize_derive"] }
 
 sqlx = { version = "0.8", optional = true, default-features = false, features = ["runtime-tokio-rustls", "postgres", "uuid", "migrate"] }
 
