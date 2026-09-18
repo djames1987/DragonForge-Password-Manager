@@ -9,7 +9,7 @@ use dragonforge_vault::{MAX_VAULT_FILE_BYTES, inspect_vault_file};
 use reqwest::{
     StatusCode,
     blocking::{Client, Response},
-    header::{AUTHORIZATION, HeaderMap, HeaderValue},
+    header::{AUTHORIZATION, HeaderValue},
 };
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -528,13 +528,20 @@ fn config_path(vault_path: &Path) -> PathBuf {
 
 fn load_config(vault_path: &Path) -> Result<Option<SyncConfig>, SyncError> {
     let path = config_path(vault_path);
-    let bytes = match fs::read(path) {
+    let backup = path.with_extension("json.bak");
+    if !path.exists() && backup.exists() {
+        fs::rename(&backup, &path).map_err(|error| SyncError::Io(error.to_string()))?;
+    }
+
+    let mut bytes = match fs::read(path) {
         Ok(bytes) => bytes,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
         Err(error) => return Err(SyncError::Io(error.to_string())),
     };
-    let config: SyncConfig =
-        serde_json::from_slice(&bytes).map_err(|error| SyncError::InvalidConfig(error.to_string()))?;
+    let parsed = serde_json::from_slice(&bytes)
+        .map_err(|error| SyncError::InvalidConfig(error.to_string()));
+    bytes.zeroize();
+    let config: SyncConfig = parsed?;
     if config.version != SYNC_CONFIG_VERSION {
         return Err(SyncError::InvalidConfig(
             "unsupported sync configuration version".to_owned(),
@@ -548,7 +555,7 @@ fn load_config(vault_path: &Path) -> Result<Option<SyncConfig>, SyncError> {
 fn save_config(vault_path: &Path, config: &SyncConfig) -> Result<(), SyncError> {
     let path = config_path(vault_path);
     let temp = path.with_extension("json.tmp");
-    let bytes =
+    let mut bytes =
         serde_json::to_vec(config).map_err(|error| SyncError::InvalidConfig(error.to_string()))?;
 
     let mut options = OpenOptions::new();
@@ -561,10 +568,12 @@ fn save_config(vault_path: &Path, config: &SyncConfig) -> Result<(), SyncError> 
     let mut file = options
         .open(&temp)
         .map_err(|error| SyncError::Io(error.to_string()))?;
-    file.write_all(&bytes)
-        .map_err(|error| SyncError::Io(error.to_string()))?;
-    file.sync_all()
-        .map_err(|error| SyncError::Io(error.to_string()))?;
+    let write_result = file
+        .write_all(&bytes)
+        .and_then(|()| file.sync_all())
+        .map_err(|error| SyncError::Io(error.to_string()));
+    bytes.zeroize();
+    write_result?;
     let backup = path.with_extension("json.bak");
     if backup.exists() {
         fs::remove_file(&backup).map_err(|error| SyncError::Io(error.to_string()))?;
@@ -587,19 +596,43 @@ fn save_config(vault_path: &Path, config: &SyncConfig) -> Result<(), SyncError> 
 }
 
 fn replace_file_atomically(path: &Path, bytes: &[u8]) -> Result<(), SyncError> {
-    let temp = path.with_extension("dfvault.sync.tmp");
-    let backup = path.with_extension("dfvault.sync.bak");
-    fs::write(&temp, bytes).map_err(|error| SyncError::Io(error.to_string()))?;
+    let extension = path
+        .extension()
+        .and_then(|value| value.to_str())
+        .unwrap_or("vault");
+    let temp = path.with_extension(format!("{extension}.tmp"));
+    let backup = path.with_extension(format!("{extension}.bak"));
+
+    let mut options = OpenOptions::new();
+    options.create(true).truncate(true).write(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+    let mut file = options
+        .open(&temp)
+        .map_err(|error| SyncError::Io(error.to_string()))?;
+    file.write_all(bytes)
+        .and_then(|()| file.sync_all())
+        .map_err(|error| SyncError::Io(error.to_string()))?;
 
     if backup.exists() {
         fs::remove_file(&backup).map_err(|error| SyncError::Io(error.to_string()))?;
     }
-    fs::rename(path, &backup).map_err(|error| SyncError::Io(error.to_string()))?;
+    if path.exists() {
+        fs::rename(path, &backup).map_err(|error| SyncError::Io(error.to_string()))?;
+    }
     if let Err(error) = fs::rename(&temp, path) {
-        let _ = fs::rename(&backup, path);
+        if backup.exists() && !path.exists() {
+            let _ = fs::rename(&backup, path);
+        }
         return Err(SyncError::Io(error.to_string()));
     }
-    fs::remove_file(backup).map_err(|error| SyncError::Io(error.to_string()))
+    if backup.exists() {
+        fs::remove_file(backup).map_err(|error| SyncError::Io(error.to_string()))?;
+    }
+    Ok(())
 }
 
 fn status_from_config(config: &SyncConfig) -> SyncStatus {
