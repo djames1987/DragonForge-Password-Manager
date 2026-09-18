@@ -85,8 +85,7 @@ async fn health_reports_protocol_version() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::OK);
-    let body: serde_json::Value =
-        serde_json::from_slice(&body_bytes(response).await).unwrap();
+    let body: serde_json::Value = serde_json::from_slice(&body_bytes(response).await).unwrap();
     assert_eq!(body["ok"], true);
     assert_eq!(body["protocolVersion"], 1);
 }
@@ -110,7 +109,12 @@ async fn provisioning_requires_admin_token_and_returns_high_entropy_sync_token()
     let account = create_account(&router).await;
     assert_ne!(account.account_id, Uuid::nil());
     assert_eq!(account.sync_token.len(), 64);
-    assert!(account.sync_token.bytes().all(|byte| byte.is_ascii_hexdigit()));
+    assert!(
+        account
+            .sync_token
+            .bytes()
+            .all(|byte| byte.is_ascii_hexdigit())
+    );
 }
 
 #[tokio::test]
@@ -136,8 +140,7 @@ async fn opaque_vault_round_trip_and_revision_conflict_are_enforced() {
         .unwrap();
 
     assert_eq!(created.status(), StatusCode::CREATED);
-    let created_meta: SyncMetadata =
-        serde_json::from_slice(&body_bytes(created).await).unwrap();
+    let created_meta: SyncMetadata = serde_json::from_slice(&body_bytes(created).await).unwrap();
     assert_eq!(created_meta.revision, 1);
     assert_eq!(created_meta.content_sha256.len(), 64);
 
@@ -192,8 +195,7 @@ async fn opaque_vault_round_trip_and_revision_conflict_are_enforced() {
         .unwrap();
 
     assert_eq!(updated.status(), StatusCode::OK);
-    let updated_meta: SyncMetadata =
-        serde_json::from_slice(&body_bytes(updated).await).unwrap();
+    let updated_meta: SyncMetadata = serde_json::from_slice(&body_bytes(updated).await).unwrap();
     assert_eq!(updated_meta.revision, 2);
 
     let fetched = router
