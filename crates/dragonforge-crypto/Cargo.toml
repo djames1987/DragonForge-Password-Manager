@@ -11,11 +11,14 @@ description = "Cryptographic foundation for DragonForge Password Manager"
 aes-gcm = "0.10.3"
 argon2 = "0.5.3"
 hkdf = "0.12.4"
+ml-dsa = { version = "0.1.1", features = ["alloc", "getrandom", "zeroize"] }
+ml-kem = { version = "0.3.2", features = ["getrandom", "zeroize"] }
 rand_core = { version = "0.6.4", features = ["getrandom"] }
 serde = { version = "1.0", features = ["derive"] }
 sha2 = "0.10.8"
 subtle = "2.6.1"
 thiserror = "2.0"
+x25519-dalek = { version = "3.0.0", features = ["getrandom", "static_secrets", "zeroize"] }
 zeroize = { version = "1.8", features = ["zeroize_derive"] }
 
 [dev-dependencies]
