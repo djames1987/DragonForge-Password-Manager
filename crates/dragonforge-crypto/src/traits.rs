@@ -13,12 +13,7 @@ pub trait AeadCipher {
         aad: &[u8],
     ) -> Result<EncryptedEnvelope>;
 
-    fn open(
-        &self,
-        key: &SecretKey,
-        envelope: &EncryptedEnvelope,
-        aad: &[u8],
-    ) -> Result<Vec<u8>>;
+    fn open(&self, key: &SecretKey, envelope: &EncryptedEnvelope, aad: &[u8]) -> Result<Vec<u8>>;
 }
 
 pub trait KeyDeriver {
