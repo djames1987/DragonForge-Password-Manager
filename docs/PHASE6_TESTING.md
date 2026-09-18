@@ -1,5 +1,7 @@
 # Phase 6 Browser Extension Verification
 
+**Final status: PASS — automated verification plus manual Chrome and Edge end-to-end login testing completed.**
+
 ## Automated Windows verification
 
 Run:
