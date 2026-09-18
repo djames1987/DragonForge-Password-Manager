@@ -2,7 +2,7 @@
 
 DragonForge Password Manager is a security-first, zero-knowledge password manager project designed for long-term cryptographic agility and post-quantum migration.
 
-> **Development status:** Phase 7 — Sync Server Foundation
+> **Development status:** Phase 8 — Multi-Device Sync
 
 ## Completed phases
 
@@ -113,6 +113,22 @@ DragonForge Password Manager is a security-first, zero-knowledge password manage
 - Phase 7 API integration tests and uploadable Windows verification runner.
 - CI compiles/tests the sync server with PostgreSQL support on Linux and Windows.
 
+### Phase 8 — Multi-Device Sync
+
+- Desktop synchronization client for the Phase 7 zero-knowledge sync server.
+- Synchronizes the already-encrypted `.dfvault` file; the server never receives decrypted vault items.
+- Per-vault sync sidecar stores server URL, bearer token, last server revision, and last synchronized ciphertext hash.
+- HTTPS required for remote servers; plaintext HTTP allowed only for loopback development.
+- Safe decision engine distinguishes upload, download, up-to-date, rollback/mismatch, and true conflict states.
+- First sync never overwrites an existing remote vault without an explicit user choice.
+- Newer remote vaults are structurally validated before replacement.
+- Remote pulls lock the local vault before encrypted-file replacement.
+- Explicit **Keep Local** and **Keep Remote** conflict resolution.
+- Atomic Windows-safe updates for sync metadata and remote vault replacement.
+- Modern desktop sync controls integrated into the existing settings UI and sidebar.
+- Real two-device integration tests against the actual Phase 7 Axum server.
+- Phase 8 verification runner and Linux/Windows CI coverage.
+
 The post-quantum implementation uses the pure-Rust RustCrypto `ml-kem` and `ml-dsa` crates rather than the older unmaintained `pqcrypto-*` bindings.
 
 ## Workspace
@@ -146,6 +162,8 @@ The post-quantum implementation uses the pure-Rust RustCrypto `ml-kem` and `ml-d
 │   ├── PHASE6_TESTING.md
 │   ├── PHASE7_SYNC_SERVER.md
 │   ├── PHASE7_TESTING.md
+│   ├── PHASE8_MULTI_DEVICE_SYNC.md
+│   ├── PHASE8_TESTING.md
 │   └── VAULT_FORMAT.md
 ├── scripts/
 │   ├── run-phase4-tests.cmd
@@ -277,3 +295,25 @@ test-logs\dragonforge-phase7-YYYYMMDD-HHMMSS.log.sha256
 ```
 
 See [docs/PHASE7_TESTING.md](docs/PHASE7_TESTING.md).
+
+
+## Phase 8 multi-device sync
+
+Start a development sync server and provision a test account, then configure the server URL and returned sync token in the desktop application's **Vault settings → Multi-device sync** section.
+
+See [docs/PHASE8_MULTI_DEVICE_SYNC.md](docs/PHASE8_MULTI_DEVICE_SYNC.md).
+
+## Automated Phase 8 verification
+
+```powershell
+.\scripts\run-phase8-tests.ps1
+```
+
+The runner creates:
+
+```text
+test-logs\dragonforge-phase8-YYYYMMDD-HHMMSS.log
+test-logs\dragonforge-phase8-YYYYMMDD-HHMMSS.log.sha256
+```
+
+See [docs/PHASE8_TESTING.md](docs/PHASE8_TESTING.md).
