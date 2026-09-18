@@ -104,10 +104,16 @@ pub(crate) fn configure(
 
 pub(crate) fn remove(vault_path: &Path) -> Result<SyncStatus, SyncError> {
     let path = config_path(vault_path);
-    match fs::remove_file(path) {
-        Ok(()) => {}
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-        Err(error) => return Err(SyncError::Io(error.to_string())),
+    for candidate in [
+        path.clone(),
+        path.with_extension("json.tmp"),
+        path.with_extension("json.bak"),
+    ] {
+        match fs::remove_file(candidate) {
+            Ok(()) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(SyncError::Io(error.to_string())),
+        }
     }
     Ok(SyncStatus {
         configured: false,
@@ -409,6 +415,15 @@ fn upload(
     {
         return Err(SyncError::InvalidResponse);
     }
+
+    let expected_hash = sha256_hex(bytes);
+    let expected_revision = base_revision
+        .checked_add(1)
+        .ok_or(SyncError::InvalidResponse)?;
+    if metadata.content_sha256 != expected_hash || metadata.revision != expected_revision {
+        return Err(SyncError::InvalidResponse);
+    }
+
     Ok(UploadMetadata {
         revision: metadata.revision,
         content_sha256: metadata.content_sha256,
