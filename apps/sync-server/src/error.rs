@@ -58,9 +58,7 @@ impl IntoResponse for ApiError {
                 "request is not permitted".to_owned(),
                 None,
             ),
-            Self::BadRequest(message) => {
-                (StatusCode::BAD_REQUEST, "badRequest", message, None)
-            }
+            Self::BadRequest(message) => (StatusCode::BAD_REQUEST, "badRequest", message, None),
             Self::NotFound => (
                 StatusCode::NOT_FOUND,
                 "notFound",
@@ -97,9 +95,7 @@ impl From<StoreError> for ApiError {
     fn from(value: StoreError) -> Self {
         match value {
             StoreError::NotFound => Self::NotFound,
-            StoreError::Conflict { current_revision } => {
-                Self::Conflict { current_revision }
-            }
+            StoreError::Conflict { current_revision } => Self::Conflict { current_revision },
             StoreError::AccountExists | StoreError::Internal => Self::Unavailable,
         }
     }
