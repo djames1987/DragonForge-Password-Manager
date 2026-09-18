@@ -22,6 +22,24 @@ pub enum CryptoError {
     UnsupportedCipherSuite,
     #[error("HKDF expansion failed")]
     HkdfExpandFailed,
+    #[error("invalid ML-KEM-768 public key")]
+    InvalidMlKemPublicKey,
+    #[error("invalid ML-KEM-768 private seed")]
+    InvalidMlKemPrivateSeed,
+    #[error("invalid ML-KEM-768 ciphertext")]
+    InvalidMlKemCiphertext,
+    #[error("invalid ML-DSA-65 verifying key")]
+    InvalidMlDsaVerifyingKey,
+    #[error("invalid ML-DSA-65 private seed")]
+    InvalidMlDsaPrivateSeed,
+    #[error("invalid ML-DSA-65 signature")]
+    InvalidMlDsaSignature,
+    #[error("ML-DSA-65 signature verification failed")]
+    SignatureVerificationFailed,
+    #[error("X25519 peer public key produced a non-contributory shared secret")]
+    NonContributoryX25519,
+    #[error("invalid hybrid KEM material")]
+    InvalidHybridMaterial,
 }
 
 pub type Result<T> = std::result::Result<T, CryptoError>;
