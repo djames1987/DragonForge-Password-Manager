@@ -71,8 +71,7 @@ async fn create_account(app: &axum::Router) -> String {
         .await
         .unwrap();
     assert_eq!(response.status(), StatusCode::CREATED);
-    let account: AccountResponse =
-        serde_json::from_slice(&response_bytes(response).await).unwrap();
+    let account: AccountResponse = serde_json::from_slice(&response_bytes(response).await).unwrap();
     account.sync_token
 }
 
@@ -86,9 +85,7 @@ async fn enroll(
     let verifying_key_hex = hex::encode(key.verifying_key().as_bytes());
     let proof_message = format!(
         "dragonforge/device-enrollment/v1\n{}\n{}\n{}",
-        device_id,
-        name,
-        verifying_key_hex
+        device_id, name, verifying_key_hex
     );
     let body = serde_json::json!({
         "deviceId": device_id,
@@ -140,7 +137,9 @@ fn request_message(
         path,
         timestamp,
         hex::encode(Sha256::digest(body)),
-        base_revision.map(|value| value.to_string()).unwrap_or_default()
+        base_revision
+            .map(|value| value.to_string())
+            .unwrap_or_default()
     )
     .into_bytes()
 }
@@ -290,7 +289,6 @@ async fn device_enrollment_approval_and_revocation_gate_sync_access() {
     );
 }
 
-
 #[tokio::test]
 async fn revoked_device_history_does_not_allow_first_device_rebootstrap() {
     let store = InMemoryStore::default();
@@ -345,7 +343,6 @@ async fn revoked_device_history_does_not_allow_first_device_rebootstrap() {
     assert_eq!(replacement.status, DeviceStatus::Pending);
 }
 
-
 #[tokio::test]
 async fn enrollment_rejects_invalid_device_proof_of_possession() {
     let app = app();
@@ -356,9 +353,7 @@ async fn enrollment_rejects_invalid_device_proof_of_possession() {
     let verifying_key_hex = hex::encode(claimed_key.verifying_key().as_bytes());
     let proof_message = format!(
         "dragonforge/device-enrollment/v1\n{}\n{}\n{}",
-        device_id,
-        "Untrusted Device",
-        verifying_key_hex
+        device_id, "Untrusted Device", verifying_key_hex
     );
     let body = serde_json::json!({
         "deviceId": device_id,
@@ -382,7 +377,6 @@ async fn enrollment_rejects_invalid_device_proof_of_possession() {
 
     assert_eq!(response.status(), StatusCode::FORBIDDEN);
 }
-
 
 #[tokio::test]
 async fn enrolled_accounts_require_fresh_signed_device_requests() {
@@ -410,13 +404,7 @@ async fn enrolled_accounts_require_fresh_signed_device_requests() {
     assert_eq!(unsigned.status(), StatusCode::FORBIDDEN);
 
     let stale_timestamp = now_seconds().saturating_sub(301);
-    let stale_signature = key.sign(&request_message(
-        "GET",
-        &path,
-        stale_timestamp,
-        &[],
-        None,
-    ));
+    let stale_signature = key.sign(&request_message("GET", &path, stale_timestamp, &[], None));
     let stale = app
         .clone()
         .oneshot(
