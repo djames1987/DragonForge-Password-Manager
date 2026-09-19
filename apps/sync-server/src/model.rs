@@ -45,7 +45,6 @@ pub struct SyncMetadata {
     pub updated_at_ms: u64,
 }
 
-
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub enum DeviceStatus {
@@ -96,6 +95,7 @@ pub struct EnrollDeviceRequest {
     pub device_id: Uuid,
     pub name: String,
     pub verifying_key_hex: String,
+    pub proof_signature_hex: String,
 }
 
 #[derive(Debug, Serialize)]
