@@ -194,9 +194,10 @@ async fn begin(
     vault_id: Uuid,
     generation: u64,
     key: &MlDsa65KeyPair,
+    nonce_byte: &str,
 ) -> axum::response::Response {
     let timestamp = now_seconds();
-    let nonce_hex = "ab".repeat(32);
+    let nonce_hex = nonce_byte.repeat(32);
     let signature = key.sign(&auth_message(
         "begin",
         account_id,
@@ -296,11 +297,14 @@ async fn recovery_rotates_credentials_revokes_devices_and_invalidates_old_kit() 
         serde_json::from_slice(&body_bytes(configured).await).unwrap();
     assert_eq!(configured.generation, 1);
 
-    let begun = begin(&app, account.account_id, vault_id, 1, &recovery_key).await;
+    let begun = begin(&app, account.account_id, vault_id, 1, &recovery_key, "ab").await;
     assert_eq!(begun.status(), StatusCode::OK);
     let begun: RecoveryBegun = serde_json::from_slice(&body_bytes(begun).await).unwrap();
     assert_eq!(begun.generation, 1);
     assert_eq!(begun.envelope_hex, hex::encode(envelope));
+
+    let replayed = begin(&app, account.account_id, vault_id, 1, &recovery_key, "ab").await;
+    assert_eq!(replayed.status(), StatusCode::FORBIDDEN);
 
     let replacement_id = Uuid::new_v4();
     let replacement_key = MlDsa65KeyPair::generate();
@@ -394,7 +398,7 @@ async fn recovery_rotates_credentials_revokes_devices_and_invalidates_old_kit() 
         StatusCode::OK
     );
 
-    let old_kit = begin(&app, account.account_id, vault_id, 1, &recovery_key).await;
+    let old_kit = begin(&app, account.account_id, vault_id, 1, &recovery_key, "bc").await;
     assert_eq!(old_kit.status(), StatusCode::CONFLICT);
 
     let rotated = begin(
@@ -403,6 +407,7 @@ async fn recovery_rotates_credentials_revokes_devices_and_invalidates_old_kit() 
         vault_id,
         2,
         &new_recovery_key,
+        "ef",
     )
     .await;
     assert_eq!(rotated.status(), StatusCode::OK);
