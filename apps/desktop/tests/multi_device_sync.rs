@@ -105,7 +105,10 @@ fn encrypted_vault_syncs_between_two_devices_and_detects_conflicts() {
     device_b
         .unlock_vault(&device_b_path, MASTER, &created.account_secret_hex)
         .unwrap();
-    assert_eq!(device_b.list_items(Some("Device A Login")).unwrap().len(), 1);
+    assert_eq!(
+        device_b.list_items(Some("Device A Login")).unwrap().len(),
+        1
+    );
 
     device_a
         .save_item(&login("A Conflict Winner", "winner@example.com"))
@@ -195,8 +198,5 @@ fn explicit_keep_local_conflict_resolution_uploads_new_revision() {
     device_a
         .unlock_vault(&device_a_path, MASTER, &created.account_secret_hex)
         .unwrap();
-    assert_eq!(
-        device_a.list_items(Some("Local Choice")).unwrap().len(),
-        1
-    );
+    assert_eq!(device_a.list_items(Some("Local Choice")).unwrap().len(), 1);
 }
