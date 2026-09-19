@@ -87,7 +87,7 @@ async fn health_reports_protocol_version() {
     assert_eq!(response.status(), StatusCode::OK);
     let body: serde_json::Value = serde_json::from_slice(&body_bytes(response).await).unwrap();
     assert_eq!(body["ok"], true);
-    assert_eq!(body["protocolVersion"], 1);
+    assert_eq!(body["protocolVersion"], 2);
 }
 
 #[tokio::test]
