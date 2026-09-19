@@ -8,7 +8,9 @@ use std::{
 use dragonforge_crypto::{
     AeadCipher, Aes256GcmCipher, EncryptedEnvelope, MlDsa65KeyPair, OsRandom, SecretKey,
 };
-use dragonforge_vault::{AccountSecret, MAX_VAULT_FILE_BYTES, Vault, validate_encrypted_vault_bytes};
+use dragonforge_vault::{
+    AccountSecret, MAX_VAULT_FILE_BYTES, Vault, validate_encrypted_vault_bytes,
+};
 use rand_core::{OsRng, RngCore};
 use reqwest::{
     StatusCode,
@@ -93,8 +95,7 @@ pub(crate) fn configure(
     let envelope = encrypt_account_secret(&recovery_seed, vault_id_uuid, &account_secret)?;
     account_secret.zeroize();
 
-    let envelope_bytes =
-        serde_json::to_vec(&envelope).map_err(|_| SyncError::InvalidResponse)?;
+    let envelope_bytes = serde_json::to_vec(&envelope).map_err(|_| SyncError::InvalidResponse)?;
     let envelope_hex = hex::encode(&envelope_bytes);
     let recovery_verifying_key_hex = hex::encode(recovery_key.verifying_key().as_bytes());
     let registration = sync::register_recovery(
@@ -151,8 +152,8 @@ pub(crate) fn recover(
         return Err(SyncError::InvalidResponse);
     }
 
-    let envelope_bytes = hex::decode(&begin.envelope_hex)
-        .map_err(|_| SyncError::InvalidResponse)?;
+    let envelope_bytes =
+        hex::decode(&begin.envelope_hex).map_err(|_| SyncError::InvalidResponse)?;
     let envelope: EncryptedEnvelope =
         serde_json::from_slice(&envelope_bytes).map_err(|_| SyncError::InvalidResponse)?;
     let mut account_secret_bytes =
@@ -198,27 +199,23 @@ pub(crate) fn recover(
     let replacement_key = MlDsa65KeyPair::generate();
     let replacement_seed = replacement_key.export_seed();
     let replacement_name = normalized_device_name(device_name, replacement_device_id)?;
-    let replacement_verifying_key_hex =
-        hex::encode(replacement_key.verifying_key().as_bytes());
-    let replacement_proof_signature_hex = hex::encode(replacement_key.sign(
-        &device_enrollment_message(
+    let replacement_verifying_key_hex = hex::encode(replacement_key.verifying_key().as_bytes());
+    let replacement_proof_signature_hex =
+        hex::encode(replacement_key.sign(&device_enrollment_message(
             replacement_device_id,
             &replacement_name,
             &replacement_verifying_key_hex,
-        ),
-    ));
+        )));
 
     let new_recovery_key = MlDsa65KeyPair::generate();
     let new_recovery_seed = new_recovery_key.export_seed();
-    let new_recovery_verifying_key_hex =
-        hex::encode(new_recovery_key.verifying_key().as_bytes());
-    let new_recovery_proof_signature_hex = hex::encode(new_recovery_key.sign(
-        &recovery_rotation_message(
+    let new_recovery_verifying_key_hex = hex::encode(new_recovery_key.verifying_key().as_bytes());
+    let new_recovery_proof_signature_hex =
+        hex::encode(new_recovery_key.sign(&recovery_rotation_message(
             parsed.account_id,
             parsed.vault_id,
             &new_recovery_verifying_key_hex,
-        ),
-    ));
+        )));
     let account_secret_export = account_secret.export();
     let new_envelope = encrypt_account_secret(
         &new_recovery_seed,
@@ -299,8 +296,7 @@ pub(crate) fn recover(
             "server returned HTTP {status} while completing recovery"
         )));
     }
-    let completed: CompleteResponse =
-        response.json().map_err(|_| SyncError::InvalidResponse)?;
+    let completed: CompleteResponse = response.json().map_err(|_| SyncError::InvalidResponse)?;
     if completed.device.device_id != replacement_device_id
         || completed.device.status != "active"
         || completed.generation != parsed.generation.saturating_add(1)
@@ -485,11 +481,11 @@ fn decode_account_secret_bytes(value: &str) -> Result<Vec<u8>, SyncError> {
     Ok(bytes)
 }
 
-fn normalized_device_name(
-    preferred: Option<&str>,
-    device_id: Uuid,
-) -> Result<String, SyncError> {
-    let default_name = format!("Recovered DragonForge Desktop {}", &device_id.to_string()[..8]);
+fn normalized_device_name(preferred: Option<&str>, device_id: Uuid) -> Result<String, SyncError> {
+    let default_name = format!(
+        "Recovered DragonForge Desktop {}",
+        &device_id.to_string()[..8]
+    );
     let name = preferred
         .map(str::trim)
         .filter(|value| !value.is_empty())
@@ -557,11 +553,7 @@ fn complete_message(
     .into_bytes()
 }
 
-fn recovery_rotation_message(
-    account_id: Uuid,
-    vault_id: Uuid,
-    verifying_key_hex: &str,
-) -> Vec<u8> {
+fn recovery_rotation_message(account_id: Uuid, vault_id: Uuid, verifying_key_hex: &str) -> Vec<u8> {
     format!(
         "dragonforge/recovery-rotation/v1\n{}\n{}\n{}",
         account_id,
@@ -571,11 +563,7 @@ fn recovery_rotation_message(
     .into_bytes()
 }
 
-fn device_enrollment_message(
-    device_id: Uuid,
-    name: &str,
-    verifying_key_hex: &str,
-) -> Vec<u8> {
+fn device_enrollment_message(device_id: Uuid, name: &str, verifying_key_hex: &str) -> Vec<u8> {
     format!(
         "dragonforge/device-enrollment/v1\n{}\n{}\n{}",
         device_id,
@@ -598,10 +586,14 @@ fn validate_server_url(value: &str) -> Result<(), SyncError> {
         .map_err(|_| SyncError::InvalidConfig("server URL is invalid".to_owned()))?;
     match parsed.scheme() {
         "https" => Ok(()),
-        "http" if matches!(
-            parsed.host_str().unwrap_or_default(),
-            "127.0.0.1" | "::1" | "localhost"
-        ) => Ok(()),
+        "http"
+            if matches!(
+                parsed.host_str().unwrap_or_default(),
+                "127.0.0.1" | "::1" | "localhost"
+            ) =>
+        {
+            Ok(())
+        }
         "http" => Err(SyncError::InvalidConfig(
             "plaintext HTTP is allowed only for loopback development servers".to_owned(),
         )),
