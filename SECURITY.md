@@ -2,7 +2,7 @@
 
 ## Current status
 
-DragonForge Password Manager is under active development through **Phase 8 — Multi-Device Sync**.
+DragonForge Password Manager has completed **Phase 8 — Multi-Device Sync** and remains under active development toward later security and device-management phases.
 
 The project contains working cryptographic primitives, post-quantum/hybrid components, a hardened persistent local vault, a Tauri desktop application, a Chromium browser-extension bridge verified on Windows with Microsoft Edge and Google Chrome, and a zero-knowledge sync-server foundation. It has **not** received an independent cryptographic or application-security audit and must not yet be trusted with production credentials or other high-value secrets.
 
