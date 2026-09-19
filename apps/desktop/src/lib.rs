@@ -3,6 +3,7 @@
 mod bridge;
 mod commands;
 mod recovery;
+mod secret_store;
 mod service;
 mod sync;
 
