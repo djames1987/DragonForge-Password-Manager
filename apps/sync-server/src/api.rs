@@ -383,13 +383,7 @@ async fn verify_device_decision(
         .map_err(|_| ApiError::Forbidden)?;
     let signature = hex::decode(signature_hex)
         .map_err(|_| ApiError::BadRequest("device signature must be hexadecimal".to_owned()))?;
-    let message = device_decision_message(
-        account_id,
-        approver_device_id,
-        target.device_id,
-        &target.verifying_key,
-        action,
-    );
+    let message = device_decision_message(approver_device_id, target.device_id, action);
     verifying_key
         .verify(&message, &signature)
         .map_err(|_| ApiError::Forbidden)
@@ -416,19 +410,13 @@ pub fn request_signature_message(
 }
 
 pub fn device_decision_message(
-    account_id: Uuid,
     approver_device_id: Uuid,
     target_device_id: Uuid,
-    target_verifying_key: &[u8],
     action: &str,
 ) -> Vec<u8> {
     format!(
-        "dragonforge/device-decision/v1\n{}\n{}\n{}\n{}\n{}",
-        action,
-        account_id,
-        approver_device_id,
-        target_device_id,
-        hex::encode(Sha256::digest(target_verifying_key))
+        "dragonforge/device-decision/v1\n{}\n{}\n{}",
+        action, approver_device_id, target_device_id
     )
     .into_bytes()
 }
