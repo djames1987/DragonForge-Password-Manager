@@ -201,7 +201,6 @@ fn explicit_keep_local_conflict_resolution_uploads_new_revision() {
     assert_eq!(device_a.list_items(Some("Local Choice")).unwrap().len(), 1);
 }
 
-
 #[test]
 fn tampered_remote_snapshot_is_rejected_before_local_replacement() {
     let server = start_sync_server();
@@ -224,9 +223,7 @@ fn tampered_remote_snapshot_is_rejected_before_local_replacement() {
     let ciphertext = tampered_json["items"][0]["payload"]["ciphertext"]
         .as_array_mut()
         .expect("encrypted item ciphertext array");
-    let first_byte = ciphertext[0]
-        .as_u64()
-        .expect("ciphertext byte");
+    let first_byte = ciphertext[0].as_u64().expect("ciphertext byte");
     ciphertext[0] = serde_json::Value::from((first_byte ^ 1) as u8);
     let tampered_bytes = serde_json::to_vec_pretty(&tampered_json).unwrap();
 
@@ -254,13 +251,7 @@ fn tampered_remote_snapshot_is_rejected_before_local_replacement() {
 
     assert!(device.status().unwrap().unlocked);
     assert_eq!(fs::read(&vault_path).unwrap(), original_bytes);
-    assert_eq!(
-        device
-            .list_items(Some("Protected Login"))
-            .unwrap()
-            .len(),
-        1
-    );
+    assert_eq!(device.list_items(Some("Protected Login")).unwrap().len(), 1);
 
     device.lock_vault().unwrap();
     device
