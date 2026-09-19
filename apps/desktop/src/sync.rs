@@ -1393,18 +1393,72 @@ mod tests {
         assert!(status.device_name.is_some());
 
         let migrated: serde_json::Value =
-            serde_json::from_slice(&fs::read(sidecar).unwrap()).unwrap();
-        assert_eq!(migrated["version"], 2);
+            serde_json::from_slice(&fs::read(&sidecar).unwrap()).unwrap();
+        assert_eq!(migrated["version"], 3);
         assert_eq!(migrated["lastRevision"], 7);
         assert_eq!(migrated["lastContentSha256"], last_hash);
-        assert_eq!(
-            migrated["syncToken"],
-            serde_json::Value::String("a".repeat(64))
-        );
         assert!(migrated["deviceId"].as_str().is_some());
-        assert_eq!(
-            migrated["deviceSigningSeedHex"].as_str().map(str::len),
-            Some(64)
-        );
+
+        #[cfg(target_os = "windows")]
+        {
+            assert!(migrated.get("syncToken").is_none());
+            assert!(migrated.get("deviceSigningSeedHex").is_none());
+            assert!(migrated["credentialId"].as_str().is_some());
+            remove(&vault_path).unwrap();
+        }
+
+        #[cfg(not(target_os = "windows"))]
+        {
+            assert_eq!(
+                migrated["syncToken"],
+                serde_json::Value::String("a".repeat(64))
+            );
+            assert_eq!(
+                migrated["deviceSigningSeedHex"].as_str().map(str::len),
+                Some(64)
+            );
+        }
+    }
+
+    #[test]
+    fn protected_v3_disk_config_omits_sync_secrets() {
+        let config = SyncConfig {
+            version: SYNC_CONFIG_VERSION,
+            server_url: "https://sync.example.com".to_owned(),
+            sync_token: "a".repeat(64),
+            last_revision: 9,
+            last_content_sha256: Some("bc".repeat(32)),
+            device_id: Some(Uuid::nil().to_string()),
+            device_name: Some("Test Device".to_owned()),
+            device_signing_seed_hex: Some("d".repeat(64)),
+            credential_id: Some("credential-reference".to_owned()),
+        };
+
+        let disk = disk_config(&config, true);
+        let value = serde_json::to_value(disk).unwrap();
+        assert!(value.get("syncToken").is_none());
+        assert!(value.get("deviceSigningSeedHex").is_none());
+        assert_eq!(value["credentialId"], "credential-reference");
+        assert_eq!(value["lastRevision"], 9);
+    }
+
+    #[test]
+    fn legacy_disk_config_retains_secrets_only_when_explicitly_requested() {
+        let config = SyncConfig {
+            version: SYNC_CONFIG_VERSION,
+            server_url: "https://sync.example.com".to_owned(),
+            sync_token: "a".repeat(64),
+            last_revision: 0,
+            last_content_sha256: None,
+            device_id: None,
+            device_name: None,
+            device_signing_seed_hex: Some("e".repeat(64)),
+            credential_id: None,
+        };
+
+        let disk = disk_config(&config, false);
+        let value = serde_json::to_value(disk).unwrap();
+        assert_eq!(value["syncToken"], "a".repeat(64));
+        assert_eq!(value["deviceSigningSeedHex"], "e".repeat(64));
     }
 }
