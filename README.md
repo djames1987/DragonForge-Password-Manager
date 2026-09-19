@@ -2,7 +2,7 @@
 
 DragonForge Password Manager is a security-first, zero-knowledge password manager project designed for long-term cryptographic agility and post-quantum migration.
 
-> **Development status:** Phase 9 — Device Enrollment
+> **Development status:** Phase 9 — Device Enrollment **COMPLETE**
 
 ## Completed phases
 
@@ -132,11 +132,13 @@ DragonForge Password Manager is a security-first, zero-knowledge password manage
 ### Phase 9 — Device Enrollment
 
 - ML-DSA-65 device signing identities generated locally per synchronized desktop.
+- Enrollment/rename requests include an ML-DSA proof-of-possession binding device UUID, name, and verifying key.
 - Sync protocol version 2 with signed device authorization.
 - First enrolled device establishes the initial trusted device.
 - Additional devices enter a pending state and require approval by an active device.
 - Active-device signed approval and revocation decisions.
 - Pending and revoked devices are denied encrypted-vault access.
+- Revocation is terminal at the persistence layer; a revoked device identity cannot be reactivated by a stale/concurrent approval.
 - Vault GET/PUT signatures bind method, path, timestamp, ciphertext hash, and base revision.
 - Five-minute request timestamp freshness window.
 - Reusing a device UUID with a different public key is rejected.
