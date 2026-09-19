@@ -74,6 +74,7 @@ try {
         "scripts/run-phase6-tests.ps1",
         "scripts/run-phase7-tests.ps1",
         "scripts/run-phase8-tests.ps1",
+        "scripts/run-phase9-tests.ps1",
         "scripts/run-phase10-tests.ps1"
     )
     foreach ($PowerShellFile in $PowerShellFiles) {
