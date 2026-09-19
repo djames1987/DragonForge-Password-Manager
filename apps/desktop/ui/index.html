@@ -102,7 +102,7 @@
         <span>•</span>
         <span>No cloud account required</span>
         <span>•</span>
-        <span>Phase 8 multi-device sync</span>
+        <span>Phase 9 device enrollment</span>
       </div>
     </div>
   </section>
@@ -339,6 +339,20 @@
           <button id="configure-sync" class="primary-button">Save sync settings</button>
           <button id="settings-sync-now" class="secondary-button">Sync now</button>
           <button id="remove-sync" class="danger-button">Remove sync</button>
+        </div>
+        <div class="device-enrollment">
+          <h4>Device enrollment</h4>
+          <p class="muted">Each synchronized computer has an ML-DSA-65 identity. New devices must be approved by an active device.</p>
+          <label class="field"><span>This device name</span><input id="device-name" autocomplete="off" maxlength="120" placeholder="e.g. Office PC"></label>
+          <div class="sync-actions">
+            <button id="enroll-device" class="secondary-button">Enroll / refresh device</button>
+            <button id="refresh-devices" class="secondary-button">Refresh devices</button>
+          </div>
+          <div id="device-status-card" class="sync-status-card">
+            <strong id="device-status-title">Device not enrolled</strong>
+            <span id="device-status-detail">Configure sync first.</span>
+          </div>
+          <div id="device-list" class="device-list"></div>
         </div>
         <div id="sync-conflict-actions" class="sync-conflict-actions hidden">
           <div class="warning-box">Both copies changed. Choose which encrypted vault copy should win. The losing copy cannot be merged automatically in Phase 8.</div>
