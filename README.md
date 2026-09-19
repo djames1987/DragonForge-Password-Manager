@@ -121,7 +121,7 @@ DragonForge Password Manager is a security-first, zero-knowledge password manage
 - HTTPS required for remote servers; plaintext HTTP allowed only for loopback development.
 - Safe decision engine distinguishes upload, download, up-to-date, rollback/mismatch, and true conflict states.
 - First sync never overwrites an existing remote vault without an explicit user choice.
-- Newer remote vaults are structurally validated before replacement.
+- Newer remote vaults must pass server-hash, structural, vault-ID, and AEAD item authentication before replacement.
 - Remote pulls lock the local vault before encrypted-file replacement.
 - Explicit **Keep Local** and **Keep Remote** conflict resolution.
 - Atomic Windows-safe updates for sync metadata and remote vault replacement.
@@ -172,6 +172,10 @@ The post-quantum implementation uses the pure-Rust RustCrypto `ml-kem` and `ml-d
 │   ├── run-phase5-tests.ps1
 │   ├── run-phase6-tests.cmd
 │   ├── run-phase6-tests.ps1
+│   ├── run-phase7-tests.cmd
+│   ├── run-phase7-tests.ps1
+│   ├── run-phase8-tests.cmd
+│   ├── run-phase8-tests.ps1
 │   └── install-browser-native-host.ps1
 └── .github/workflows/ci.yml
 ```
