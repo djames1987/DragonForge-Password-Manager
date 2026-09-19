@@ -167,6 +167,8 @@ The synchronization sidecar is also updated through a temporary/backup replaceme
 
 ## Phase 8 non-goals
 
+> Phase 9 supersedes the device-identity, enrollment-approval, and revocation items below. This list records what Phase 8 itself intentionally did not include.
+
 Phase 8 intentionally does not yet include:
 
 - automatic background/push synchronization;
