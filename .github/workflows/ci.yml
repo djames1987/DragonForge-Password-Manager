@@ -68,6 +68,12 @@ jobs:
       - name: Debug workspace tests
         run: cargo test --workspace --all-features
 
+      - name: Phase 10 recovery server tests
+        run: cargo test -p dragonforge-sync-server --test account_recovery -- --nocapture
+
+      - name: Phase 10 desktop recovery tests
+        run: cargo test -p dragonforge-desktop --test account_recovery -- --nocapture
+
       - name: Phase 9 device enrollment tests
         run: cargo test -p dragonforge-sync-server --test device_enrollment -- --nocapture
 
@@ -118,7 +124,8 @@ jobs:
             'scripts/run-phase6-tests.ps1',
             'scripts/run-phase7-tests.ps1',
             'scripts/run-phase8-tests.ps1',
-            'scripts/run-phase9-tests.ps1'
+            'scripts/run-phase9-tests.ps1',
+            'scripts/run-phase10-tests.ps1'
           )
           foreach ($file in $files) {
             $tokens = $null
@@ -144,6 +151,12 @@ jobs:
 
       - name: Run sync server API tests
         run: cargo test -p dragonforge-sync-server --test sync_api -- --nocapture
+
+      - name: Run Phase 10 recovery server tests
+        run: cargo test -p dragonforge-sync-server --test account_recovery -- --nocapture
+
+      - name: Run Phase 10 desktop recovery tests
+        run: cargo test -p dragonforge-desktop --test account_recovery -- --nocapture
 
       - name: Run Phase 9 device enrollment tests
         run: cargo test -p dragonforge-sync-server --test device_enrollment -- --nocapture
