@@ -113,8 +113,15 @@ async fn enroll_device(
 
     let verifying_key = hex::decode(&request.verifying_key_hex)
         .map_err(|_| ApiError::BadRequest("device verifying key must be hexadecimal".to_owned()))?;
-    MlDsa65VerifyingKey::from_bytes(&verifying_key)
+    let verifying = MlDsa65VerifyingKey::from_bytes(&verifying_key)
         .map_err(|_| ApiError::BadRequest("device verifying key is invalid".to_owned()))?;
+    let proof_signature = hex::decode(&request.proof_signature_hex)
+        .map_err(|_| ApiError::BadRequest("device enrollment proof must be hexadecimal".to_owned()))?;
+    let proof_message =
+        device_enrollment_message(request.device_id, name, &request.verifying_key_hex);
+    verifying
+        .verify(&proof_message, &proof_signature)
+        .map_err(|_| ApiError::Forbidden)?;
 
     let (device, first_device) = state
         .store
@@ -390,6 +397,20 @@ async fn verify_device_decision(
     verifying_key
         .verify(&message, &signature)
         .map_err(|_| ApiError::Forbidden)
+}
+
+pub fn device_enrollment_message(
+    device_id: Uuid,
+    name: &str,
+    verifying_key_hex: &str,
+) -> Vec<u8> {
+    format!(
+        "dragonforge/device-enrollment/v1\n{}\n{}\n{}",
+        device_id,
+        name,
+        verifying_key_hex.to_ascii_lowercase()
+    )
+    .into_bytes()
 }
 
 pub fn request_signature_message(
