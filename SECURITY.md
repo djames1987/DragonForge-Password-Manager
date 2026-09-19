@@ -2,7 +2,7 @@
 
 ## Current status
 
-DragonForge Password Manager has completed **Phase 8 — Multi-Device Sync** and remains under active development toward later security and device-management phases.
+DragonForge Password Manager is under active development through **Phase 9 — Device Enrollment**.
 
 The project contains working cryptographic primitives, post-quantum/hybrid components, a hardened persistent local vault, a Tauri desktop application, a Chromium browser-extension bridge verified on Windows with Microsoft Edge and Google Chrome, and a zero-knowledge sync-server foundation. It has **not** received an independent cryptographic or application-security audit and must not yet be trusted with production credentials or other high-value secrets.
 
@@ -68,12 +68,27 @@ The project contains working cryptographic primitives, post-quantum/hybrid compo
 - Server revision rollback, same-revision ciphertext mismatch, and disappearance of a previously synchronized remote vault are treated as safety failures rather than normal updates.
 - Non-loopback sync endpoints must use HTTPS. Plain HTTP is accepted only for local development on loopback addresses.
 
+## Device-enrollment security boundary
+
+- Each enrolled desktop has a unique UUID and ML-DSA-65 signing identity.
+- The server stores only the device verifying key; the signing seed remains local.
+- The first device ever enrolled for an account becomes active; later devices are pending until explicitly approved.
+- Once any device record exists, bearer-only vault access is disabled and active-device signatures are required.
+- Signed vault requests bind the HTTP method, API path, request timestamp, ciphertext SHA-256, and base revision.
+- Requests outside the five-minute clock-skew window are rejected.
+- Pending and revoked devices cannot read or write synchronized vault state.
+- Device approvals and revocations must be signed by an active device.
+- A device UUID cannot be rebound to a different ML-DSA verifying key.
+- A device cannot revoke itself through the Phase 9 API.
+- The account cannot silently bootstrap a new first device after previously enrolled devices have been revoked.
+- Phase 9 stores the local ML-DSA private seed in the sync sidecar; OS/hardware-backed key storage remains future hardening.
+
 ## Desktop-specific limitations
 
 - Decrypted item values necessarily exist in webview memory while displayed or edited. Locking clears application references but cannot prove physical erasure of every runtime copy.
 - Copying a password or Account Secret to the system clipboard may expose it to other local applications or clipboard-history features. Timed clipboard clearing is not yet implemented.
 - Automatic inactivity lock is not implemented yet.
-- Phase 8 stores the per-vault sync bearer token in a local sidecar file. On Unix the sidecar is created with mode 0600; on Windows it inherits the current user's filesystem ACLs. Hardware/OS-backed secret storage is not implemented yet.
+- Phase 9 stores both the per-vault sync bearer token and the local device signing seed in a local sidecar file. On Unix the sidecar is created with mode 0600; on Windows it inherits the current user's filesystem ACLs. Hardware/OS-backed secret storage is not implemented yet.
 - A user or malware process with access to the current OS account may be able to read the sync sidecar token and impersonate that device to the sync service.
 - Hardware-backed unlock (Windows Hello/TPM, Keychain/Secure Enclave, etc.) is not yet implemented.
 - The desktop app is not yet code-signed or distributed through a production installer.
