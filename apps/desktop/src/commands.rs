@@ -255,7 +255,7 @@ pub async fn configure_recovery(
     mut account_secret_hex: String,
 ) -> Result<RecoverySetup, String> {
     let service = service.inner().clone();
-    let result = tauri::async_runtime::spawn_blocking(move || {
+    tauri::async_runtime::spawn_blocking(move || {
         let result = service
             .configure_recovery(&account_secret_hex)
             .map_err(error_message);
@@ -263,8 +263,7 @@ pub async fn configure_recovery(
         result
     })
     .await
-    .map_err(error_message)?;
-    result
+    .map_err(error_message)?
 }
 
 #[tauri::command]
@@ -277,7 +276,7 @@ pub async fn recover_synced_vault(
     device_name: Option<String>,
 ) -> Result<RecoverVaultResponse, String> {
     let service = service.inner().clone();
-    let result = tauri::async_runtime::spawn_blocking(move || {
+    tauri::async_runtime::spawn_blocking(move || {
         let result = service
             .recover_synced_vault(
                 PathBuf::from(destination),
@@ -292,6 +291,5 @@ pub async fn recover_synced_vault(
         result
     })
     .await
-    .map_err(error_message)?;
-    result
+    .map_err(error_message)?
 }
