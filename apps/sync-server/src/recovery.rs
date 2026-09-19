@@ -94,13 +94,12 @@ struct CompleteRecoveryResponse {
     device: DeviceSummary,
 }
 
-pub(crate) fn router(state: AppState) -> Router {
+pub(crate) fn router() -> Router<AppState> {
     Router::new()
         .route("/v1/recovery/configure", post(configure_recovery))
         .route("/v1/recovery/begin", post(begin_recovery))
         .route("/v1/recovery/vault", post(fetch_recovery_vault))
         .route("/v1/recovery/complete", post(complete_recovery))
-        .with_state(state)
 }
 
 async fn configure_recovery(
