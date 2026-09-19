@@ -345,6 +345,9 @@ async fn authenticate_signed_request(
     base_revision: Option<u64>,
 ) -> Result<Uuid, ApiError> {
     let account_id = authenticate_account(state, headers).await?;
+    if state.store.list_devices(account_id).await?.is_empty() {
+        return Ok(account_id);
+    }
     let device_id = parse_device_id(headers)?;
     let timestamp = parse_device_timestamp(headers)?;
     validate_timestamp(timestamp)?;
