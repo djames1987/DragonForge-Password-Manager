@@ -321,6 +321,13 @@ async fn revoked_device_history_does_not_allow_first_device_rebootstrap() {
         .set_device_status(account_id, first_id, DeviceStatus::Revoked)
         .await
         .unwrap();
+    assert!(
+        store
+            .set_device_status(account_id, first_id, DeviceStatus::Active)
+            .await
+            .is_err(),
+        "revoked device identity was reactivated"
+    );
 
     let replacement_id = Uuid::new_v4();
     let replacement_key = MlDsa65KeyPair::generate();
