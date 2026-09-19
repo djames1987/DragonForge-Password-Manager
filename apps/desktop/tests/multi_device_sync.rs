@@ -2,9 +2,12 @@ use std::{
     fs,
     sync::{Arc, mpsc},
     thread,
+    time::{SystemTime, UNIX_EPOCH},
 };
 
+use dragonforge_crypto::MlDsa65KeyPair;
 use dragonforge_desktop::{DesktopService, ItemDraft};
+use sha2::{Digest, Sha256};
 use dragonforge_sync_server::{
     AccountRecord, AppState, InMemoryStore, SyncStore, build_router, hash_sync_token,
 };
@@ -79,6 +82,11 @@ fn encrypted_vault_syncs_between_two_devices_and_detects_conflicts() {
         .unlock_vault(&device_b_path, MASTER, &created.account_secret_hex)
         .unwrap();
     device_b.configure_sync(&server, TOKEN).unwrap();
+
+    let pending = device_b.enroll_device(Some("Device B")).unwrap();
+    assert_eq!(pending.status, "pending");
+    let approved = device_a.approve_device(&pending.device_id).unwrap();
+    assert_eq!(approved.status, "active");
 
     let initial_conflict = device_b.sync_now().unwrap();
     assert_eq!(initial_conflict.action, "initialConflict");
@@ -170,6 +178,9 @@ fn explicit_keep_local_conflict_resolution_uploads_new_revision() {
         .unlock_vault(&device_b_path, MASTER, &created.account_secret_hex)
         .unwrap();
     device_b.configure_sync(&server, TOKEN).unwrap();
+    let pending = device_b.enroll_device(Some("Device B")).unwrap();
+    assert_eq!(pending.status, "pending");
+    device_a.approve_device(&pending.device_id).unwrap();
     assert_eq!(
         device_b.resolve_sync_conflict("keepRemote").unwrap().action,
         "keptRemote"
@@ -228,9 +239,31 @@ fn tampered_remote_snapshot_is_rejected_before_local_replacement() {
     let tampered_bytes = serde_json::to_vec_pretty(&tampered_json).unwrap();
 
     let vault_id = device.status().unwrap().vault_id.unwrap();
+    let sidecar_path = format!("{}.sync.json", vault_path.display());
+    let sidecar: serde_json::Value =
+        serde_json::from_slice(&fs::read(sidecar_path).unwrap()).unwrap();
+    let device_id = sidecar["deviceId"].as_str().unwrap();
+    let seed_hex = sidecar["deviceSigningSeedHex"].as_str().unwrap();
+    let seed = hex::decode(seed_hex).unwrap();
+    let key_pair = MlDsa65KeyPair::from_seed(&seed).unwrap();
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+    let path = format!("/v1/vaults/{vault_id}");
+    let message = format!(
+        "dragonforge/device-request/v1\nPUT\n{}\n{}\n{}\n1",
+        path,
+        timestamp,
+        hex::encode(Sha256::digest(&tampered_bytes))
+    );
+    let signature = hex::encode(key_pair.sign(message.as_bytes()));
     let response = reqwest::blocking::Client::new()
-        .put(format!("{server}/v1/vaults/{vault_id}"))
+        .put(format!("{server}{path}"))
         .header("authorization", format!("Bearer {TOKEN}"))
+        .header("x-dragonforge-device-id", device_id)
+        .header("x-dragonforge-device-timestamp", timestamp.to_string())
+        .header("x-dragonforge-device-signature", signature)
         .header("x-dragonforge-base-revision", "1")
         .header("content-type", "application/octet-stream")
         .body(tampered_bytes)
