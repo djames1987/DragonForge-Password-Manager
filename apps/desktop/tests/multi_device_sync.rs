@@ -7,10 +7,10 @@ use std::{
 
 use dragonforge_crypto::MlDsa65KeyPair;
 use dragonforge_desktop::{DesktopService, ItemDraft};
-use sha2::{Digest, Sha256};
 use dragonforge_sync_server::{
     AccountRecord, AppState, InMemoryStore, SyncStore, build_router, hash_sync_token,
 };
+use sha2::{Digest, Sha256};
 use tempfile::tempdir;
 use uuid::Uuid;
 
