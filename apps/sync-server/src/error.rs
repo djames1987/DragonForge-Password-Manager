@@ -16,6 +16,8 @@ pub enum StoreError {
     AccountExists,
     #[error("device already exists with different identity")]
     DeviceExists,
+    #[error("invalid device status transition")]
+    InvalidDeviceTransition,
     #[error("store failure")]
     Internal,
 }
@@ -101,6 +103,9 @@ impl From<StoreError> for ApiError {
             StoreError::DeviceExists => Self::BadRequest(
                 "device ID is already registered with a different identity".to_owned(),
             ),
+            StoreError::InvalidDeviceTransition => {
+                Self::BadRequest("revoked device identities cannot be reactivated".to_owned())
+            }
             StoreError::AccountExists | StoreError::Internal => Self::Unavailable,
         }
     }
