@@ -464,7 +464,9 @@ fn ensure_active_device(vault_path: &Path, config: &mut SyncConfig) -> Result<()
     let enrollment = post_enrollment(config)?;
     match enrollment.device.status {
         ServerDeviceStatus::Active => Ok(()),
-        ServerDeviceStatus::Pending | ServerDeviceStatus::Revoked => Err(SyncError::DeviceNotActive),
+        ServerDeviceStatus::Pending | ServerDeviceStatus::Revoked => {
+            Err(SyncError::DeviceNotActive)
+        }
     }
 }
 
@@ -473,7 +475,10 @@ fn ensure_device_identity(
     preferred_name: Option<&str>,
 ) -> Result<(), SyncError> {
     if config.device_id.is_some() && config.device_signing_seed_hex.is_some() {
-        if let Some(name) = preferred_name.map(str::trim).filter(|value| !value.is_empty()) {
+        if let Some(name) = preferred_name
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+        {
             config.device_name = Some(validate_device_name(name)?.to_owned());
         }
         config.version = SYNC_CONFIG_VERSION;
@@ -515,9 +520,11 @@ fn post_enrollment(config: &SyncConfig) -> Result<EnrollResponse, SyncError> {
     }
 
     let verifying_key_hex = hex::encode(key_pair.verifying_key().as_bytes());
-    let proof_signature_hex = hex::encode(
-        key_pair.sign(&device_enrollment_message(device_id, name, &verifying_key_hex)),
-    );
+    let proof_signature_hex = hex::encode(key_pair.sign(&device_enrollment_message(
+        device_id,
+        name,
+        &verifying_key_hex,
+    )));
 
     let response = client()?
         .post(format!("{}/v1/devices/enroll", config.server_url))
@@ -661,14 +668,7 @@ fn upload(
 ) -> Result<UploadMetadata, SyncError> {
     let path = format!("/v1/vaults/{vault_id}");
     let timestamp = now_seconds()?;
-    let signature = sign_request(
-        config,
-        "PUT",
-        &path,
-        timestamp,
-        bytes,
-        Some(base_revision),
-    )?;
+    let signature = sign_request(config, "PUT", &path, timestamp, bytes, Some(base_revision))?;
     let response = client()?
         .put(format!("{}{}", config.server_url, path))
         .header(AUTHORIZATION, bearer(&config.sync_token)?)
@@ -737,11 +737,7 @@ fn sign_request(
     Ok(hex::encode(device_key_pair(config)?.sign(&message)))
 }
 
-fn device_enrollment_message(
-    device_id: Uuid,
-    name: &str,
-    verifying_key_hex: &str,
-) -> Vec<u8> {
+fn device_enrollment_message(device_id: Uuid, name: &str, verifying_key_hex: &str) -> Vec<u8> {
     format!(
         "dragonforge/device-enrollment/v1\n{}\n{}\n{}",
         device_id,
@@ -1084,7 +1080,6 @@ fn empty_status() -> SyncStatus {
     }
 }
 
-
 pub(crate) struct RecoveryRegistration {
     pub account_id: Uuid,
     pub generation: u64,
@@ -1228,16 +1223,14 @@ mod tests {
         });
         fs::write(&sidecar, serde_json::to_vec(&legacy).unwrap()).unwrap();
 
-        let status = configure(
-            &vault_path,
-            "http://127.0.0.1:8787",
-            &"a".repeat(64),
-        )
-        .unwrap();
+        let status = configure(&vault_path, "http://127.0.0.1:8787", &"a".repeat(64)).unwrap();
 
         assert!(status.configured);
         assert_eq!(status.last_revision, 7);
-        assert_eq!(status.last_content_sha256.as_deref(), Some(last_hash.as_str()));
+        assert_eq!(
+            status.last_content_sha256.as_deref(),
+            Some(last_hash.as_str())
+        );
         assert!(status.device_id.is_some());
         assert!(status.device_name.is_some());
 
@@ -1252,9 +1245,7 @@ mod tests {
         );
         assert!(migrated["deviceId"].as_str().is_some());
         assert_eq!(
-            migrated["deviceSigningSeedHex"]
-                .as_str()
-                .map(str::len),
+            migrated["deviceSigningSeedHex"].as_str().map(str::len),
             Some(64)
         );
     }
