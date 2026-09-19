@@ -1,5 +1,7 @@
 # Phase 8 — Multi-Device Sync
 
+**Status: COMPLETE — implemented, multi-device tested, tamper-regression tested, and verified on Windows/Linux CI.**
+
 ## Status
 
 Phase 8 connects the DragonForge desktop application to the Phase 7 zero-knowledge sync server.
@@ -179,3 +181,26 @@ Phase 8 intentionally does not yet include:
 - mobile synchronization.
 
 Those remain later roadmap work.
+
+
+## Completion verification
+
+Phase 8 was closed after the following verification completed successfully:
+
+- Rust formatting and Clippy with warnings denied;
+- full debug workspace tests;
+- browser-extension regression tests;
+- Phase 7 sync-server API regressions;
+- Phase 4 vault-hardening regressions;
+- Phase 8 multi-device integration tests using two independent desktop services;
+- initial upload and safe onboarding;
+- newer-remote pull with local lock before replacement;
+- explicit Keep Local and Keep Remote conflict resolution;
+- tampered remote encrypted snapshot rejection before local replacement;
+- release workspace tests;
+- Windows desktop release build;
+- Windows native-host release build;
+- PostgreSQL-enabled sync-server release build;
+- successful clean release build on a second Windows PC.
+
+The CI cache step is explicitly non-blocking because cache upload/cleanup is not a product verification gate and may fail when hosted runners exhaust ephemeral disk after release builds.
