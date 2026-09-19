@@ -19,7 +19,9 @@ use url::Url;
 use uuid::Uuid;
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
-use crate::secret_store::{self, SyncSecretBundle};
+use crate::secret_store;
+#[cfg(target_os = "windows")]
+use crate::secret_store::SyncSecretBundle;
 
 const SYNC_CONFIG_VERSION: u16 = 3;
 const HEADER_BASE_REVISION: &str = "x-dragonforge-base-revision";
@@ -209,11 +211,13 @@ pub(crate) fn configure(
 }
 
 pub(crate) fn remove(vault_path: &Path) -> Result<SyncStatus, SyncError> {
-    let credential_id = load_config(vault_path)?
-        .and_then(|config| config.credential_id.clone());
     #[cfg(target_os = "windows")]
-    if let Some(credential_id) = credential_id.as_deref() {
-        secret_store::delete(credential_id).map_err(SyncError::SecretStorage)?;
+    {
+        let credential_id = load_config(vault_path)?
+            .and_then(|config| config.credential_id.clone());
+        if let Some(credential_id) = credential_id.as_deref() {
+            secret_store::delete(credential_id).map_err(SyncError::SecretStorage)?;
+        }
     }
 
     let path = config_path(vault_path);
