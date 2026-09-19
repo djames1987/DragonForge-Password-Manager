@@ -510,6 +510,98 @@
     }
   }
 
+  async function refreshDeviceEnrollment() {
+    if (!state.syncStatus?.configured) {
+      $("device-status-title").textContent = "Device not enrolled";
+      $("device-status-detail").textContent = "Configure sync first.";
+      $("device-list").replaceChildren();
+      return;
+    }
+
+    try {
+      const own = await call("own_device_status");
+      $("device-status-title").textContent = own.name + " · " + own.status;
+      $("device-status-detail").textContent = own.deviceId;
+      if (!$("device-name").value) $("device-name").value = own.name;
+    } catch (error) {
+      $("device-status-title").textContent = "Device enrollment required";
+      $("device-status-detail").textContent = error.message;
+    }
+
+    try {
+      const devices = await call("list_devices");
+      renderDevices(devices);
+    } catch {
+      $("device-list").replaceChildren();
+    }
+  }
+
+  function renderDevices(devices) {
+    const container = $("device-list");
+    container.replaceChildren();
+    for (const device of devices) {
+      const row = document.createElement("div");
+      row.className = "device-row";
+
+      const info = document.createElement("div");
+      const title = document.createElement("strong");
+      title.textContent = device.name;
+      const meta = document.createElement("span");
+      meta.textContent = device.status + " · " + device.deviceId;
+      info.append(title, meta);
+      row.appendChild(info);
+
+      const actions = document.createElement("div");
+      actions.className = "sync-actions";
+      const ownId = state.syncStatus?.deviceId;
+      if (device.status === "pending") {
+        const approve = document.createElement("button");
+        approve.className = "secondary-button compact";
+        approve.textContent = "Approve";
+        approve.addEventListener("click", () => decideDevice("approve_device", device.deviceId));
+        actions.appendChild(approve);
+      } else if (device.status === "active" && device.deviceId !== ownId) {
+        const revoke = document.createElement("button");
+        revoke.className = "danger-button compact";
+        revoke.textContent = "Revoke";
+        revoke.addEventListener("click", () => decideDevice("revoke_device", device.deviceId));
+        actions.appendChild(revoke);
+      }
+      row.appendChild(actions);
+      container.appendChild(row);
+    }
+  }
+
+  async function enrollCurrentDevice() {
+    const button = $("enroll-device");
+    const name = $("device-name").value.trim();
+    setBusy(button, true, "Enrolling…");
+    try {
+      const device = await call("enroll_device", { name: name || null });
+      await refreshSyncStatus();
+      await refreshDeviceEnrollment();
+      toast(device.status === "active"
+        ? "This device is authorized."
+        : "Enrollment requested. Approve this device from an active device.");
+    } catch (error) {
+      toast(error.message, "error");
+    } finally {
+      setBusy(button, false);
+    }
+  }
+
+  async function decideDevice(command, deviceId) {
+    const verb = command === "approve_device" ? "approve" : "revoke";
+    if (!window.confirm((verb === "approve" ? "Approve" : "Revoke") + " this device?")) return;
+    try {
+      await call(command, { deviceId });
+      await refreshDeviceEnrollment();
+      toast("Device " + verb + "d.");
+    } catch (error) {
+      toast(error.message, "error");
+    }
+  }
+
   async function configureSync() {
     const button = $("configure-sync");
     const serverUrl = $("sync-server-url").value.trim();
@@ -523,7 +615,8 @@
       $("sync-token").value = "";
       $("sync-conflict-actions").classList.add("hidden");
       await refreshSyncStatus();
-      toast("Sync settings saved. Run Sync now to establish this device.");
+      await refreshDeviceEnrollment();
+      toast("Sync settings saved. Enroll this device or run Sync now to establish it.");
     } catch (error) {
       toast(error.message, "error");
     } finally {
@@ -685,11 +778,14 @@
       $("settings-modal").classList.remove("hidden");
       try {
         await refreshSyncStatus();
+        await refreshDeviceEnrollment();
       } catch (error) {
         toast(error.message, "error");
       }
     });
     $("configure-sync").addEventListener("click", configureSync);
+    $("enroll-device").addEventListener("click", enrollCurrentDevice);
+    $("refresh-devices").addEventListener("click", () => refreshDeviceEnrollment().catch((error) => toast(error.message, "error")));
     $("settings-sync-now").addEventListener("click", runSync);
     $("keep-local-sync").addEventListener("click", () => resolveSync("keepLocal"));
     $("keep-remote-sync").addEventListener("click", () => resolveSync("keepRemote"));
