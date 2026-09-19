@@ -19,7 +19,9 @@ use url::Url;
 use uuid::Uuid;
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
-const SYNC_CONFIG_VERSION: u16 = 2;
+use crate::secret_store::{self, SyncSecretBundle};
+
+const SYNC_CONFIG_VERSION: u16 = 3;
 const HEADER_BASE_REVISION: &str = "x-dragonforge-base-revision";
 const HEADER_REVISION: &str = "x-dragonforge-revision";
 const HEADER_CONTENT_SHA256: &str = "x-dragonforge-content-sha256";
@@ -45,6 +47,8 @@ pub enum SyncError {
     Io(String),
     #[error("remote vault failed structural validation: {0}")]
     InvalidRemoteVault(String),
+    #[error("secure local credential storage failed: {0}")]
+    SecretStorage(String),
 }
 
 #[derive(Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -56,6 +60,7 @@ pub struct SyncStatus {
     pub last_content_sha256: Option<String>,
     pub device_id: Option<String>,
     pub device_name: Option<String>,
+    pub secret_storage: String,
 }
 
 #[derive(Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -78,8 +83,7 @@ pub struct DeviceSummary {
     pub revoked_at_ms: Option<u64>,
 }
 
-#[derive(Serialize, Deserialize, Zeroize, ZeroizeOnDrop)]
-#[serde(rename_all = "camelCase")]
+#[derive(Zeroize, ZeroizeOnDrop)]
 struct SyncConfig {
     #[zeroize(skip)]
     version: u16,
@@ -91,13 +95,31 @@ struct SyncConfig {
     #[zeroize(skip)]
     last_content_sha256: Option<String>,
     #[zeroize(skip)]
-    #[serde(default)]
     device_id: Option<String>,
     #[zeroize(skip)]
+    device_name: Option<String>,
+    device_signing_seed_hex: Option<String>,
+    #[zeroize(skip)]
+    credential_id: Option<String>,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SyncConfigDisk {
+    version: u16,
+    server_url: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    sync_token: Option<String>,
+    last_revision: u64,
+    last_content_sha256: Option<String>,
+    #[serde(default)]
+    device_id: Option<String>,
     #[serde(default)]
     device_name: Option<String>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     device_signing_seed_hex: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    credential_id: Option<String>,
 }
 
 pub(crate) struct PullPayload {
