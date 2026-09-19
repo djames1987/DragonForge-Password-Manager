@@ -2,7 +2,7 @@
 
 ## Current status
 
-DragonForge Password Manager is under active development through **Phase 9 — Device Enrollment**.
+DragonForge Password Manager has completed **Phase 9 — Device Enrollment** and remains under active development toward recovery, sharing, mobile, monitoring, and later hardening phases.
 
 The project contains working cryptographic primitives, post-quantum/hybrid components, a hardened persistent local vault, a Tauri desktop application, a Chromium browser-extension bridge verified on Windows with Microsoft Edge and Google Chrome, and a zero-knowledge sync-server foundation. It has **not** received an independent cryptographic or application-security audit and must not yet be trusted with production credentials or other high-value secrets.
 
@@ -123,3 +123,16 @@ When reporting a vulnerability, include the affected commit/version, reproductio
 ## Supported versions
 
 There is no production-supported release yet. Security fixes apply to the current development branch until a formal release policy is introduced.
+
+
+## Phase 9 device enrollment hardening
+
+- Every enrolled device uses a locally generated ML-DSA-65 signing identity.
+- Enrollment and rename/refresh operations require ML-DSA proof-of-possession binding the device UUID, display name, and verifying key.
+- After the first device record exists, the sync bearer token alone is insufficient for vault GET/PUT access.
+- Active-device request signatures bind method, path, timestamp, request-body SHA-256, and base revision when applicable.
+- Requests outside the five-minute timestamp freshness window are rejected.
+- Pending and revoked devices cannot synchronize encrypted vault state.
+- Revocation is terminal at the storage layer, preventing stale or concurrent approval from reactivating a revoked identity.
+- The server never stores device private signing seeds.
+- The current desktop sidecar still stores the local device signing seed; OS-backed secure key storage remains future work.
