@@ -104,7 +104,11 @@ fn lost_device_recovery_restores_vault_and_rotates_trust() {
         1
     );
 
-    let old_device_error = original.sync_now().unwrap_err().to_string();
+    let old_device_error = original
+        .sync_now()
+        .err()
+        .expect("the original device must be rejected after recovery")
+        .to_string();
     assert!(
         old_device_error.contains("authentication") || old_device_error.contains("not active"),
         "unexpected old-device failure: {old_device_error}"
