@@ -2,7 +2,7 @@
 
 DragonForge Password Manager is a security-first, zero-knowledge password manager project designed for long-term cryptographic agility and post-quantum migration.
 
-> **Development status:** Phase 10 — Secure Account & Device Recovery **COMPLETE**
+> **Development status:** Phase 11 — Windows Credential Protection & Sidecar Secret Migration **IMPLEMENTED; WINDOWS VERIFICATION PENDING**
 
 ## Completed phases
 
@@ -164,6 +164,21 @@ DragonForge Password Manager is a security-first, zero-knowledge password manage
 - Desktop UI for recovery-kit creation/rotation and lost-device disaster recovery.
 - Focused server and desktop end-to-end recovery tests plus a Phase 10 Windows verification runner.
 
+### Phase 11 — Windows Credential Protection & Sidecar Secret Migration
+
+- Sync-sidecar format upgraded to version 3.
+- On Windows, the 256-bit sync bearer token is stored in Windows Credential Manager rather than the sidecar.
+- On Windows, the ML-DSA-65 device signing seed is stored in the same protected credential bundle.
+- Version-3 Windows sidecars contain only non-secret sync metadata and a random credential reference UUID.
+- Version-3 Windows sidecars containing plaintext sync secrets are rejected.
+- Existing Phase 8/9/10 sidecars migrate automatically and fail closed if Credential Manager storage is unavailable.
+- Sync reconfiguration removes superseded Credential Manager entries.
+- Remove Sync removes the corresponding Credential Manager entry.
+- Phase 10 recovered/rotated sync credentials are installed through the protected Phase 11 storage path.
+- The desktop sync status reports whether secrets are protected by Windows Credential Manager or still use legacy sidecar storage on unsupported platforms.
+- Pure sidecar-redaction tests and a real Windows Credential Manager integration test were added.
+- Phase 11 Windows verification runner and CI gates were added.
+
 The post-quantum implementation uses the pure-Rust RustCrypto `ml-kem` and `ml-dsa` crates rather than the older unmaintained `pqcrypto-*` bindings.
 
 ## Workspace
@@ -203,6 +218,8 @@ The post-quantum implementation uses the pure-Rust RustCrypto `ml-kem` and `ml-d
 │   ├── PHASE9_TESTING.md
 │   ├── PHASE10_ACCOUNT_RECOVERY.md
 │   ├── PHASE10_TESTING.md
+│   ├── PHASE11_CREDENTIAL_PROTECTION.md
+│   ├── PHASE11_TESTING.md
 │   └── VAULT_FORMAT.md
 ├── scripts/
 │   ├── run-phase4-tests.cmd
@@ -219,6 +236,8 @@ The post-quantum implementation uses the pure-Rust RustCrypto `ml-kem` and `ml-d
 │   ├── run-phase9-tests.ps1
 │   ├── run-phase10-tests.cmd
 │   ├── run-phase10-tests.ps1
+│   ├── run-phase11-tests.cmd
+│   ├── run-phase11-tests.ps1
 │   └── install-browser-native-host.ps1
 └── .github/workflows/ci.yml
 ```
@@ -412,3 +431,24 @@ test-logs\dragonforge-phase10-YYYYMMDD-HHMMSS.log.sha256
 ```
 
 See [docs/PHASE10_TESTING.md](docs/PHASE10_TESTING.md).
+
+## Phase 11 Windows credential protection
+
+On Windows, opening/configuring a synchronized vault migrates the sync bearer token and ML-DSA device signing seed out of the per-vault sidecar and into Windows Credential Manager. The sidecar is upgraded to version 3 and retains only non-secret synchronization metadata plus a random credential reference.
+
+See [docs/PHASE11_CREDENTIAL_PROTECTION.md](docs/PHASE11_CREDENTIAL_PROTECTION.md).
+
+## Automated Phase 11 verification
+
+```powershell
+.\scripts\run-phase11-tests.ps1
+```
+
+The runner creates:
+
+```text
+test-logs\dragonforge-phase11-YYYYMMDD-HHMMSS.log
+test-logs\dragonforge-phase11-YYYYMMDD-HHMMSS.log.sha256
+```
+
+See [docs/PHASE11_TESTING.md](docs/PHASE11_TESTING.md).
