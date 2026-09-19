@@ -267,3 +267,15 @@ input::placeholder, textarea::placeholder { color: #535c6d; }
 .sync-status-card span { color: var(--muted); font-size: 10px; line-height: 1.45; overflow-wrap: anywhere; }
 .sync-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .sync-conflict-actions { margin-top: 14px; }
+
+
+.device-enrollment { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--border); }
+.device-enrollment h4 { margin: 0 0 6px; font-size: 13px; }
+.device-list { display: grid; gap: 8px; margin-top: 10px; }
+.device-row {
+  display: flex; justify-content: space-between; gap: 12px; align-items: center;
+  padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: #0d1118;
+}
+.device-row > div:first-child { display: grid; gap: 3px; min-width: 0; }
+.device-row strong { font-size: 11px; }
+.device-row span { color: var(--muted); font-size: 9px; overflow-wrap: anywhere; }
