@@ -4,6 +4,7 @@ use zeroize::{Zeroize, ZeroizeOnDrop};
 
 pub const SYNC_PROTOCOL_VERSION: u16 = 2;
 pub const MAX_SYNC_BLOB_BYTES: usize = 64 * 1024 * 1024;
+pub const MAX_RECOVERY_ENVELOPE_BYTES: usize = 16 * 1024;
 
 #[derive(Clone)]
 pub struct AccountRecord {
@@ -18,6 +19,16 @@ pub struct StoredVault {
     pub revision: u64,
     pub content_sha256: [u8; 32],
     pub ciphertext: Vec<u8>,
+    pub updated_at_ms: u64,
+}
+
+#[derive(Clone)]
+pub struct RecoveryRecord {
+    pub account_id: Uuid,
+    pub vault_id: Uuid,
+    pub verifying_key: Vec<u8>,
+    pub envelope: Vec<u8>,
+    pub generation: u64,
     pub updated_at_ms: u64,
 }
 
