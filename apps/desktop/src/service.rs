@@ -105,6 +105,19 @@ pub struct ItemDto {
     pub updated_at: u64,
 }
 
+#[derive(Serialize, Zeroize, ZeroizeOnDrop)]
+#[serde(rename_all = "camelCase")]
+pub struct RecoverVaultResponse {
+    pub account_secret_hex: String,
+    pub recovery_kit: String,
+    #[zeroize(skip)]
+    pub generation: u64,
+    #[zeroize(skip)]
+    pub status: AppStatus,
+    #[zeroize(skip)]
+    pub sync_status: crate::sync::SyncStatus,
+}
+
 #[derive(Clone, Serialize, Deserialize, Zeroize, ZeroizeOnDrop)]
 #[serde(rename_all = "camelCase")]
 pub struct ItemDraft {
@@ -455,6 +468,55 @@ impl DesktopService {
         let session = self.lock_session()?;
         let session = session.as_ref().ok_or(DesktopError::Locked)?;
         Ok(crate::sync::revoke_device(&session.path, device_id)?)
+    }
+
+    pub fn configure_recovery(
+        &self,
+        account_secret_hex: &str,
+    ) -> DesktopResult<crate::recovery::RecoverySetup> {
+        let session = self.lock_session()?;
+        let session = session.as_ref().ok_or(DesktopError::Locked)?;
+        Ok(crate::recovery::configure(
+            &session.path,
+            session.vault.vault_id(),
+            account_secret_hex,
+        )?)
+    }
+
+    pub fn recover_synced_vault(
+        &self,
+        destination: impl Into<PathBuf>,
+        server_url: &str,
+        recovery_kit: &str,
+        master_password: &str,
+        device_name: Option<&str>,
+    ) -> DesktopResult<RecoverVaultResponse> {
+        let destination = normalize_vault_path(destination.into())?;
+        let recovered = crate::recovery::recover(
+            &destination,
+            server_url,
+            recovery_kit,
+            master_password,
+            device_name,
+        )?;
+        let status = AppStatus {
+            unlocked: true,
+            vault_path: Some(recovered.path.display().to_string()),
+            vault_id: Some(recovered.vault.vault_id().to_owned()),
+            item_count: recovered.vault.len(),
+        };
+        let response = RecoverVaultResponse {
+            account_secret_hex: recovered.account_secret_hex,
+            recovery_kit: recovered.recovery_kit,
+            generation: recovered.generation,
+            status: status.clone(),
+            sync_status: recovered.sync_status,
+        };
+        *self.lock_session()? = Some(Session {
+            vault: recovered.vault,
+            path: recovered.path,
+        });
+        Ok(response)
     }
 
     pub fn sync_now(&self) -> DesktopResult<crate::sync::SyncOutcome> {

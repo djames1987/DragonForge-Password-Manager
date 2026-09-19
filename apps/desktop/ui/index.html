@@ -42,6 +42,10 @@
           <span class="button-icon">↗</span>
           Open an existing vault
         </button>
+        <button id="show-disaster-recovery" class="secondary-button large-button">
+          <span class="button-icon">↺</span>
+          Recover synchronized vault
+        </button>
       </div>
 
       <div id="create-panel" class="auth-panel hidden">
@@ -97,12 +101,35 @@
         <button id="unlock-submit" class="primary-button full-width">Unlock vault</button>
       </div>
 
+      <div id="disaster-recovery-panel" class="auth-panel hidden">
+        <div class="panel-heading">
+          <div>
+            <h2>Recover synchronized vault</h2>
+            <p>Use your offline Phase 10 recovery kit to replace lost trusted devices.</p>
+          </div>
+          <button class="icon-button auth-close" aria-label="Close">×</button>
+        </div>
+        <label class="field">
+          <span>Recovery destination</span>
+          <div class="field-row">
+            <input id="disaster-recovery-path" type="text" readonly placeholder="Choose a new .dfvault location">
+            <button id="disaster-recovery-browse" class="secondary-button compact">Browse</button>
+          </div>
+        </label>
+        <label class="field"><span>Sync server URL</span><input id="disaster-recovery-server" type="url" autocomplete="off" placeholder="https://sync.example.com"></label>
+        <label class="field"><span>Recovery kit</span><textarea id="disaster-recovery-kit" rows="4" spellcheck="false" autocomplete="off" placeholder="DFRK1:..."></textarea></label>
+        <label class="field"><span>Master password</span><input id="disaster-recovery-password" type="password" autocomplete="current-password"></label>
+        <label class="field"><span>Replacement device name</span><input id="disaster-recovery-device-name" autocomplete="off" maxlength="120" placeholder="e.g. Replacement PC"></label>
+        <div class="warning-box">A successful recovery revokes every previous device, rotates the sync token, and rotates the recovery kit. The old recovery kit cannot be used again.</div>
+        <button id="disaster-recovery-submit" class="primary-button full-width">Recover encrypted vault</button>
+      </div>
+
       <div class="welcome-footer">
         <span>Zero-knowledge architecture</span>
         <span>•</span>
         <span>No cloud account required</span>
         <span>•</span>
-        <span>Phase 9 device enrollment</span>
+        <span>Phase 10 secure recovery</span>
       </div>
     </div>
   </section>
@@ -309,6 +336,30 @@
     </div>
   </div>
 
+  <div id="disaster-recovery-result-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true">
+    <div class="modal-card recovery-card">
+      <div class="recovery-icon">✓</div>
+      <div class="eyebrow">Recovery complete</div>
+      <h2>Save your rotated recovery material</h2>
+      <p>The old recovery kit, sync token, and previous device authorizations are no longer valid.</p>
+      <div class="secret-box">
+        <code id="recovered-account-secret"></code>
+        <button id="copy-recovered-account-secret" class="secondary-button compact">Copy</button>
+      </div>
+      <div class="form-hint">Recovered Account Secret</div>
+      <div class="secret-box">
+        <code id="rotated-recovery-kit"></code>
+        <button id="copy-rotated-recovery-kit" class="secondary-button compact">Copy</button>
+      </div>
+      <div class="form-hint">New one-time recovery kit</div>
+      <label class="check-row recovery-confirm">
+        <input id="recovery-material-saved" type="checkbox">
+        <span>I have safely stored both values.</span>
+      </label>
+      <button id="recovery-result-continue" class="primary-button full-width" disabled>Continue to recovered vault</button>
+    </div>
+  </div>
+
   <div id="settings-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true">
     <div class="modal-card">
       <div class="modal-header">
@@ -353,6 +404,17 @@
             <span id="device-status-detail">Configure sync first.</span>
           </div>
           <div id="device-list" class="device-list"></div>
+        </div>
+        <div class="device-enrollment">
+          <h4>Secure account recovery</h4>
+          <p class="muted">Create an offline post-quantum recovery kit. DragonForge stores only the public recovery key and an encrypted Account Secret envelope on the sync server.</p>
+          <label class="field"><span>Account Secret</span><textarea id="recovery-account-secret" rows="2" spellcheck="false" autocomplete="off" placeholder="64-character Account Secret"></textarea></label>
+          <button id="configure-recovery" class="secondary-button">Create / rotate recovery kit</button>
+          <div id="recovery-kit-card" class="secret-box hidden">
+            <code id="recovery-kit-output"></code>
+            <button id="copy-recovery-kit" class="secondary-button compact">Copy</button>
+          </div>
+          <div class="warning-box">Store this kit offline and separate from your computer. Creating a new kit permanently invalidates the previous kit.</div>
         </div>
         <div id="sync-conflict-actions" class="sync-conflict-actions hidden">
           <div class="warning-box">Both copies changed. Choose which encrypted vault copy should win. The losing copy cannot be merged automatically in Phase 8.</div>

@@ -45,6 +45,10 @@ impl AppState {
             admin_token_hash: admin_token.map(hash_sync_token),
         }
     }
+
+    pub(crate) fn store(&self) -> &Arc<dyn SyncStore> {
+        &self.store
+    }
 }
 
 pub fn build_router(state: AppState) -> Router {
@@ -57,6 +61,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/v1/devices/{device_id}/approve", post(approve_device))
         .route("/v1/devices/{device_id}/revoke", post(revoke_device))
         .route("/v1/vaults/{vault_id}", get(get_vault).put(put_vault))
+        .merge(crate::recovery::router())
         .layer(RequestBodyLimitLayer::new(MAX_SYNC_BLOB_BYTES + 64 * 1024))
         .layer(TimeoutLayer::with_status_code(
             StatusCode::REQUEST_TIMEOUT,

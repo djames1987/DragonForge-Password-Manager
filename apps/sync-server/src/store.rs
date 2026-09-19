@@ -8,7 +8,9 @@ use async_trait::async_trait;
 use dragonforge_crypto::constant_time_eq;
 use uuid::Uuid;
 
-use crate::{AccountRecord, DeviceRecord, DeviceStatus, StoreError, StoredVault};
+use crate::{
+    AccountRecord, DeviceRecord, DeviceStatus, RecoveryRecord, StoreError, StoredVault,
+};
 
 #[async_trait]
 pub trait SyncStore: Send + Sync {
@@ -39,6 +41,29 @@ pub trait SyncStore: Send + Sync {
         status: DeviceStatus,
     ) -> Result<DeviceRecord, StoreError>;
 
+    async fn configure_recovery(
+        &self,
+        account_id: Uuid,
+        vault_id: Uuid,
+        verifying_key: Vec<u8>,
+        envelope: Vec<u8>,
+    ) -> Result<RecoveryRecord, StoreError>;
+
+    async fn get_recovery(&self, account_id: Uuid) -> Result<RecoveryRecord, StoreError>;
+
+    #[allow(clippy::too_many_arguments)]
+    async fn complete_recovery(
+        &self,
+        account_id: Uuid,
+        expected_generation: u64,
+        replacement_device_id: Uuid,
+        replacement_name: String,
+        replacement_verifying_key: Vec<u8>,
+        new_recovery_verifying_key: Vec<u8>,
+        new_recovery_envelope: Vec<u8>,
+        new_token_hash: [u8; 32],
+    ) -> Result<(DeviceRecord, RecoveryRecord), StoreError>;
+
     async fn get_vault(&self, account_id: Uuid, vault_id: Uuid) -> Result<StoredVault, StoreError>;
 
     async fn put_vault(
@@ -61,6 +86,7 @@ struct MemoryState {
     accounts: Vec<AccountRecord>,
     vaults: HashMap<(Uuid, Uuid), StoredVault>,
     devices: HashMap<(Uuid, Uuid), DeviceRecord>,
+    recovery: HashMap<Uuid, RecoveryRecord>,
 }
 
 #[async_trait]
@@ -194,6 +220,122 @@ impl SyncStore for InMemoryStore {
         Ok(record.clone())
     }
 
+    async fn configure_recovery(
+        &self,
+        account_id: Uuid,
+        vault_id: Uuid,
+        verifying_key: Vec<u8>,
+        envelope: Vec<u8>,
+    ) -> Result<RecoveryRecord, StoreError> {
+        let mut state = self.inner.lock().map_err(|_| StoreError::Internal)?;
+        if !state.accounts.iter().any(|account| account.account_id == account_id) {
+            return Err(StoreError::NotFound);
+        }
+        let generation = match state.recovery.get(&account_id) {
+            Some(existing) if existing.vault_id != vault_id => {
+                return Err(StoreError::InvalidRecoveryState);
+            }
+            Some(existing) => existing
+                .generation
+                .checked_add(1)
+                .ok_or(StoreError::Internal)?,
+            None => 1,
+        };
+        let record = RecoveryRecord {
+            account_id,
+            vault_id,
+            verifying_key,
+            envelope,
+            generation,
+            updated_at_ms: now_ms(),
+        };
+        state.recovery.insert(account_id, record.clone());
+        Ok(record)
+    }
+
+    async fn get_recovery(&self, account_id: Uuid) -> Result<RecoveryRecord, StoreError> {
+        let state = self.inner.lock().map_err(|_| StoreError::Internal)?;
+        state
+            .recovery
+            .get(&account_id)
+            .cloned()
+            .ok_or(StoreError::NotFound)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    async fn complete_recovery(
+        &self,
+        account_id: Uuid,
+        expected_generation: u64,
+        replacement_device_id: Uuid,
+        replacement_name: String,
+        replacement_verifying_key: Vec<u8>,
+        new_recovery_verifying_key: Vec<u8>,
+        new_recovery_envelope: Vec<u8>,
+        new_token_hash: [u8; 32],
+    ) -> Result<(DeviceRecord, RecoveryRecord), StoreError> {
+        let mut state = self.inner.lock().map_err(|_| StoreError::Internal)?;
+        let existing = state
+            .recovery
+            .get(&account_id)
+            .cloned()
+            .ok_or(StoreError::NotFound)?;
+        if existing.generation != expected_generation {
+            return Err(StoreError::RecoveryGenerationConflict);
+        }
+        if state
+            .devices
+            .contains_key(&(account_id, replacement_device_id))
+        {
+            return Err(StoreError::DeviceExists);
+        }
+
+        let now = now_ms();
+        for device in state
+            .devices
+            .values_mut()
+            .filter(|device| device.account_id == account_id)
+        {
+            device.status = DeviceStatus::Revoked;
+            device.revoked_at_ms = Some(now);
+        }
+
+        let replacement = DeviceRecord {
+            account_id,
+            device_id: replacement_device_id,
+            name: replacement_name,
+            verifying_key: replacement_verifying_key,
+            status: DeviceStatus::Active,
+            created_at_ms: now,
+            approved_at_ms: Some(now),
+            revoked_at_ms: None,
+        };
+        state
+            .devices
+            .insert((account_id, replacement_device_id), replacement.clone());
+
+        let account = state
+            .accounts
+            .iter_mut()
+            .find(|account| account.account_id == account_id)
+            .ok_or(StoreError::NotFound)?;
+        account.token_hash = new_token_hash;
+
+        let generation = expected_generation
+            .checked_add(1)
+            .ok_or(StoreError::Internal)?;
+        let recovery = RecoveryRecord {
+            account_id,
+            vault_id: existing.vault_id,
+            verifying_key: new_recovery_verifying_key,
+            envelope: new_recovery_envelope,
+            generation,
+            updated_at_ms: now,
+        };
+        state.recovery.insert(account_id, recovery.clone());
+        Ok((replacement, recovery))
+    }
+
     async fn get_vault(&self, account_id: Uuid, vault_id: Uuid) -> Result<StoredVault, StoreError> {
         let state = self.inner.lock().map_err(|_| StoreError::Internal)?;
         state
@@ -259,7 +401,10 @@ mod postgres {
     use sqlx::{PgPool, Row};
     use uuid::Uuid;
 
-    use crate::{AccountRecord, DeviceRecord, DeviceStatus, StoreError, StoredVault, SyncStore};
+    use crate::{
+        AccountRecord, DeviceRecord, DeviceStatus, RecoveryRecord, StoreError, StoredVault,
+        SyncStore,
+    };
 
     #[derive(Clone)]
     pub struct PostgresStore {
@@ -477,13 +622,202 @@ mod postgres {
             self.get_device(account_id, device_id).await
         }
 
+        async fn configure_recovery(
+            &self,
+            account_id: Uuid,
+            vault_id: Uuid,
+            verifying_key: Vec<u8>,
+            envelope: Vec<u8>,
+        ) -> Result<RecoveryRecord, StoreError> {
+            let mut transaction = self.pool.begin().await.map_err(|_| StoreError::Internal)?;
+            sqlx::query("SELECT account_id FROM sync_accounts WHERE account_id = $1 FOR UPDATE")
+                .bind(account_id)
+                .fetch_one(&mut *transaction)
+                .await
+                .map_err(|_| StoreError::NotFound)?;
+
+            let existing = sqlx::query(
+                "SELECT vault_id, generation FROM sync_recovery
+                 WHERE account_id = $1 FOR UPDATE",
+            )
+            .bind(account_id)
+            .fetch_optional(&mut *transaction)
+            .await
+            .map_err(|_| StoreError::Internal)?;
+
+            let generation = if let Some(row) = existing {
+                let stored_vault: Uuid =
+                    row.try_get("vault_id").map_err(|_| StoreError::Internal)?;
+                if stored_vault != vault_id {
+                    return Err(StoreError::InvalidRecoveryState);
+                }
+                let current: i64 =
+                    row.try_get("generation").map_err(|_| StoreError::Internal)?;
+                u64::try_from(current)
+                    .map_err(|_| StoreError::Internal)?
+                    .checked_add(1)
+                    .ok_or(StoreError::Internal)?
+            } else {
+                1
+            };
+            let generation_i64 =
+                i64::try_from(generation).map_err(|_| StoreError::Internal)?;
+
+            sqlx::query(
+                "INSERT INTO sync_recovery
+                 (account_id, vault_id, verifying_key, envelope, generation, updated_at)
+                 VALUES ($1, $2, $3, $4, $5, NOW())
+                 ON CONFLICT (account_id) DO UPDATE SET
+                    verifying_key = EXCLUDED.verifying_key,
+                    envelope = EXCLUDED.envelope,
+                    generation = EXCLUDED.generation,
+                    updated_at = NOW()",
+            )
+            .bind(account_id)
+            .bind(vault_id)
+            .bind(verifying_key)
+            .bind(envelope)
+            .bind(generation_i64)
+            .execute(&mut *transaction)
+            .await
+            .map_err(|_| StoreError::Internal)?;
+
+            transaction.commit().await.map_err(|_| StoreError::Internal)?;
+            self.get_recovery(account_id).await
+        }
+
+        async fn get_recovery(&self, account_id: Uuid) -> Result<RecoveryRecord, StoreError> {
+            let row = sqlx::query(
+                "SELECT vault_id, verifying_key, envelope, generation,
+                 (EXTRACT(EPOCH FROM updated_at) * 1000)::bigint AS updated_at_ms
+                 FROM sync_recovery WHERE account_id = $1",
+            )
+            .bind(account_id)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(|_| StoreError::Internal)?
+            .ok_or(StoreError::NotFound)?;
+            row_to_recovery(account_id, row)
+        }
+
+        #[allow(clippy::too_many_arguments)]
+        async fn complete_recovery(
+            &self,
+            account_id: Uuid,
+            expected_generation: u64,
+            replacement_device_id: Uuid,
+            replacement_name: String,
+            replacement_verifying_key: Vec<u8>,
+            new_recovery_verifying_key: Vec<u8>,
+            new_recovery_envelope: Vec<u8>,
+            new_token_hash: [u8; 32],
+        ) -> Result<(DeviceRecord, RecoveryRecord), StoreError> {
+            let mut transaction = self.pool.begin().await.map_err(|_| StoreError::Internal)?;
+            sqlx::query("SELECT account_id FROM sync_accounts WHERE account_id = $1 FOR UPDATE")
+                .bind(account_id)
+                .fetch_one(&mut *transaction)
+                .await
+                .map_err(|_| StoreError::NotFound)?;
+
+            let row = sqlx::query(
+                "SELECT vault_id, generation FROM sync_recovery
+                 WHERE account_id = $1 FOR UPDATE",
+            )
+            .bind(account_id)
+            .fetch_optional(&mut *transaction)
+            .await
+            .map_err(|_| StoreError::Internal)?
+            .ok_or(StoreError::NotFound)?;
+            let vault_id: Uuid = row.try_get("vault_id").map_err(|_| StoreError::Internal)?;
+            let generation_i64: i64 =
+                row.try_get("generation").map_err(|_| StoreError::Internal)?;
+            let generation =
+                u64::try_from(generation_i64).map_err(|_| StoreError::Internal)?;
+            if generation != expected_generation {
+                return Err(StoreError::RecoveryGenerationConflict);
+            }
+
+            let duplicate: Option<Uuid> = sqlx::query_scalar(
+                "SELECT device_id FROM sync_devices
+                 WHERE account_id = $1 AND device_id = $2",
+            )
+            .bind(account_id)
+            .bind(replacement_device_id)
+            .fetch_optional(&mut *transaction)
+            .await
+            .map_err(|_| StoreError::Internal)?;
+            if duplicate.is_some() {
+                return Err(StoreError::DeviceExists);
+            }
+
+            sqlx::query(
+                "UPDATE sync_devices SET status = 'revoked', revoked_at = NOW()
+                 WHERE account_id = $1 AND status <> 'revoked'",
+            )
+            .bind(account_id)
+            .execute(&mut *transaction)
+            .await
+            .map_err(|_| StoreError::Internal)?;
+
+            sqlx::query(
+                "INSERT INTO sync_devices
+                 (account_id, device_id, name, verifying_key, status, approved_at)
+                 VALUES ($1, $2, $3, $4, 'active', NOW())",
+            )
+            .bind(account_id)
+            .bind(replacement_device_id)
+            .bind(&replacement_name)
+            .bind(&replacement_verifying_key)
+            .execute(&mut *transaction)
+            .await
+            .map_err(|_| StoreError::Internal)?;
+
+            sqlx::query("UPDATE sync_accounts SET token_hash = $2 WHERE account_id = $1")
+                .bind(account_id)
+                .bind(new_token_hash.to_vec())
+                .execute(&mut *transaction)
+                .await
+                .map_err(|_| StoreError::Internal)?;
+
+            let next_generation = expected_generation
+                .checked_add(1)
+                .ok_or(StoreError::Internal)?;
+            let next_generation_i64 =
+                i64::try_from(next_generation).map_err(|_| StoreError::Internal)?;
+            sqlx::query(
+                "UPDATE sync_recovery SET
+                    verifying_key = $2,
+                    envelope = $3,
+                    generation = $4,
+                    updated_at = NOW()
+                 WHERE account_id = $1",
+            )
+            .bind(account_id)
+            .bind(new_recovery_verifying_key)
+            .bind(new_recovery_envelope)
+            .bind(next_generation_i64)
+            .execute(&mut *transaction)
+            .await
+            .map_err(|_| StoreError::Internal)?;
+
+            transaction.commit().await.map_err(|_| StoreError::Internal)?;
+            let device = self.get_device(account_id, replacement_device_id).await?;
+            let recovery = self.get_recovery(account_id).await?;
+            if recovery.vault_id != vault_id {
+                return Err(StoreError::Internal);
+            }
+            Ok((device, recovery))
+        }
+
         async fn get_vault(
             &self,
             account_id: Uuid,
             vault_id: Uuid,
         ) -> Result<StoredVault, StoreError> {
             let row = sqlx::query(
-                "SELECT revision, content_sha256, ciphertext,                  (EXTRACT(EPOCH FROM updated_at) * 1000)::bigint AS updated_at_ms                  FROM sync_vaults WHERE account_id = $1 AND vault_id = $2",
+                "SELECT revision, content_sha256, ciphertext,
+                 (EXTRACT(EPOCH FROM updated_at) * 1000)::bigint AS updated_at_ms
+                 FROM sync_vaults WHERE account_id = $1 AND vault_id = $2",
             )
             .bind(account_id)
             .bind(vault_id)
@@ -506,7 +840,8 @@ mod postgres {
             let mut transaction = self.pool.begin().await.map_err(|_| StoreError::Internal)?;
 
             let existing = sqlx::query(
-                "SELECT revision FROM sync_vaults                  WHERE account_id = $1 AND vault_id = $2 FOR UPDATE",
+                "SELECT revision FROM sync_vaults
+                 WHERE account_id = $1 AND vault_id = $2 FOR UPDATE",
             )
             .bind(account_id)
             .bind(vault_id)
@@ -530,7 +865,9 @@ mod postgres {
                         i64::try_from(next_revision).map_err(|_| StoreError::Internal)?;
 
                     sqlx::query(
-                        "UPDATE sync_vaults SET revision = $3, content_sha256 = $4,                          ciphertext = $5, updated_at = NOW()                          WHERE account_id = $1 AND vault_id = $2",
+                        "UPDATE sync_vaults SET revision = $3, content_sha256 = $4,
+                         ciphertext = $5, updated_at = NOW()
+                         WHERE account_id = $1 AND vault_id = $2",
                     )
                     .bind(account_id)
                     .bind(vault_id)
@@ -543,7 +880,10 @@ mod postgres {
                 }
                 None if base_revision == 0 => {
                     let inserted = sqlx::query(
-                        "INSERT INTO sync_vaults                          (account_id, vault_id, revision, content_sha256, ciphertext, updated_at)                          VALUES ($1, $2, 1, $3, $4, NOW())                          ON CONFLICT (account_id, vault_id) DO NOTHING",
+                        "INSERT INTO sync_vaults
+                         (account_id, vault_id, revision, content_sha256, ciphertext, updated_at)
+                         VALUES ($1, $2, 1, $3, $4, NOW())
+                         ON CONFLICT (account_id, vault_id) DO NOTHING",
                     )
                     .bind(account_id)
                     .bind(vault_id)
@@ -555,7 +895,8 @@ mod postgres {
 
                     if inserted.rows_affected() == 0 {
                         let current_row = sqlx::query(
-                            "SELECT revision FROM sync_vaults                              WHERE account_id = $1 AND vault_id = $2",
+                            "SELECT revision FROM sync_vaults
+                             WHERE account_id = $1 AND vault_id = $2",
                         )
                         .bind(account_id)
                         .bind(vault_id)
@@ -625,6 +966,27 @@ mod postgres {
             created_at_ms: u64::try_from(created_at_ms).map_err(|_| StoreError::Internal)?,
             approved_at_ms,
             revoked_at_ms,
+        })
+    }
+
+    fn row_to_recovery(
+        account_id: Uuid,
+        row: sqlx::postgres::PgRow,
+    ) -> Result<RecoveryRecord, StoreError> {
+        let generation_i64: i64 =
+            row.try_get("generation").map_err(|_| StoreError::Internal)?;
+        let updated_i64: i64 = row
+            .try_get("updated_at_ms")
+            .map_err(|_| StoreError::Internal)?;
+        Ok(RecoveryRecord {
+            account_id,
+            vault_id: row.try_get("vault_id").map_err(|_| StoreError::Internal)?,
+            verifying_key: row
+                .try_get("verifying_key")
+                .map_err(|_| StoreError::Internal)?,
+            envelope: row.try_get("envelope").map_err(|_| StoreError::Internal)?,
+            generation: u64::try_from(generation_i64).map_err(|_| StoreError::Internal)?,
+            updated_at_ms: u64::try_from(updated_i64).map_err(|_| StoreError::Internal)?,
         })
     }
 

@@ -1084,6 +1084,104 @@ fn empty_status() -> SyncStatus {
     }
 }
 
+
+pub(crate) struct RecoveryRegistration {
+    pub account_id: Uuid,
+    pub generation: u64,
+}
+
+pub(crate) fn register_recovery(
+    vault_path: &Path,
+    vault_id: &str,
+    recovery_verifying_key_hex: &str,
+    envelope_hex: &str,
+) -> Result<RecoveryRegistration, SyncError> {
+    let mut config = load_config(vault_path)?.ok_or(SyncError::NotConfigured)?;
+    ensure_active_device(vault_path, &mut config)?;
+    let vault_id = Uuid::parse_str(vault_id)
+        .map_err(|_| SyncError::InvalidConfig("vault ID is invalid".to_owned()))?;
+    let device_id = device_id(&config)?;
+    let envelope = hex::decode(envelope_hex)
+        .map_err(|_| SyncError::InvalidConfig("recovery envelope is invalid".to_owned()))?;
+    let message = format!(
+        "dragonforge/recovery-configure/v1\n{}\n{}\n{}\n{}",
+        device_id,
+        vault_id,
+        recovery_verifying_key_hex.to_ascii_lowercase(),
+        sha256_hex(&envelope)
+    );
+    let signature = hex::encode(device_key_pair(&config)?.sign(message.as_bytes()));
+
+    #[derive(Serialize)]
+    #[serde(rename_all = "camelCase")]
+    struct Request<'a> {
+        vault_id: Uuid,
+        device_id: Uuid,
+        recovery_verifying_key_hex: &'a str,
+        envelope_hex: &'a str,
+        signature_hex: String,
+    }
+
+    #[derive(Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct ResponseBody {
+        account_id: Uuid,
+        generation: u64,
+    }
+
+    let response = client()?
+        .post(format!("{}/v1/recovery/configure", config.server_url))
+        .header(AUTHORIZATION, bearer(&config.sync_token)?)
+        .json(&Request {
+            vault_id,
+            device_id,
+            recovery_verifying_key_hex,
+            envelope_hex,
+            signature_hex: signature,
+        })
+        .send()
+        .map_err(|error| SyncError::Transport(error.to_string()))?;
+    map_auth_status(&response)?;
+    if !response.status().is_success() {
+        return Err(SyncError::Transport(format!(
+            "server returned HTTP {} while configuring recovery",
+            response.status()
+        )));
+    }
+    let body: ResponseBody = response.json().map_err(|_| SyncError::InvalidResponse)?;
+    Ok(RecoveryRegistration {
+        account_id: body.account_id,
+        generation: body.generation,
+    })
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn install_recovered_config(
+    vault_path: &Path,
+    server_url: String,
+    sync_token: String,
+    revision: u64,
+    content_sha256: String,
+    device_id: Uuid,
+    device_name: String,
+    device_signing_seed_hex: String,
+) -> Result<SyncStatus, SyncError> {
+    validate_server_url(&server_url)?;
+    validate_token(&sync_token)?;
+    let config = SyncConfig {
+        version: SYNC_CONFIG_VERSION,
+        server_url: server_url.trim_end_matches('/').to_owned(),
+        sync_token,
+        last_revision: revision,
+        last_content_sha256: Some(content_sha256),
+        device_id: Some(device_id.to_string()),
+        device_name: Some(device_name),
+        device_signing_seed_hex: Some(device_signing_seed_hex),
+    };
+    save_config(vault_path, &config)?;
+    Ok(status_from_config(&config))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

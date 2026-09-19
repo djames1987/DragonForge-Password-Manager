@@ -2,6 +2,7 @@
 
 mod bridge;
 mod commands;
+mod recovery;
 mod service;
 mod sync;
 
@@ -11,8 +12,9 @@ pub use bridge::{
 };
 pub use service::{
     AppStatus, BrowserCredential, BrowserLoginSummary, CreateVaultResponse, DesktopError,
-    DesktopService, ItemDraft, ItemDto, ItemSummaryDto,
+    DesktopService, ItemDraft, ItemDto, ItemSummaryDto, RecoverVaultResponse,
 };
+pub use recovery::RecoverySetup;
 pub use sync::{DeviceSummary, SyncError, SyncOutcome, SyncStatus};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -49,6 +51,8 @@ pub fn run() {
             commands::list_devices,
             commands::approve_device,
             commands::revoke_device,
+            commands::configure_recovery,
+            commands::recover_synced_vault,
         ])
         .run(tauri::generate_context!())
         .expect("DragonForge desktop runtime failed");

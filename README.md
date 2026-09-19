@@ -2,7 +2,7 @@
 
 DragonForge Password Manager is a security-first, zero-knowledge password manager project designed for long-term cryptographic agility and post-quantum migration.
 
-> **Development status:** Phase 9 — Device Enrollment **COMPLETE**
+> **Development status:** Phase 10 — Secure Account & Device Recovery **COMPLETE**
 
 ## Completed phases
 
@@ -149,6 +149,21 @@ DragonForge Password Manager is a security-first, zero-knowledge password manage
 - Desktop device enrollment, device listing, approval, rename, and revocation controls.
 - Dedicated Phase 9 lifecycle test and Windows verification runner.
 
+### Phase 10 — Secure Account & Device Recovery
+
+- Offline ML-DSA-65 recovery identities with private recovery seeds kept only in user-held recovery kits.
+- Server stores only the recovery verifying key and a client-encrypted Account Secret envelope.
+- Recovery authorization binds account, vault, generation, timestamp, and a fresh 256-bit nonce.
+- Recovery-only access retrieves the already-encrypted remote vault without exposing plaintext to the server.
+- The recovered Account Secret is decrypted only on the replacement desktop.
+- Master-password verification occurs locally before server trust is changed or the recovery kit is consumed.
+- Successful recovery atomically revokes previous devices, activates a fresh replacement device, rotates the sync token, and rotates the recovery key.
+- Recovery generations invalidate used or superseded recovery kits.
+- Replacement devices and replacement recovery keys both prove possession of their ML-DSA private keys.
+- PostgreSQL recovery persistence and in-memory deterministic test support.
+- Desktop UI for recovery-kit creation/rotation and lost-device disaster recovery.
+- Focused server and desktop end-to-end recovery tests plus a Phase 10 Windows verification runner.
+
 The post-quantum implementation uses the pure-Rust RustCrypto `ml-kem` and `ml-dsa` crates rather than the older unmaintained `pqcrypto-*` bindings.
 
 ## Workspace
@@ -186,6 +201,8 @@ The post-quantum implementation uses the pure-Rust RustCrypto `ml-kem` and `ml-d
 │   ├── PHASE8_TESTING.md
 │   ├── PHASE9_DEVICE_ENROLLMENT.md
 │   ├── PHASE9_TESTING.md
+│   ├── PHASE10_ACCOUNT_RECOVERY.md
+│   ├── PHASE10_TESTING.md
 │   └── VAULT_FORMAT.md
 ├── scripts/
 │   ├── run-phase4-tests.cmd
@@ -200,6 +217,8 @@ The post-quantum implementation uses the pure-Rust RustCrypto `ml-kem` and `ml-d
 │   ├── run-phase8-tests.ps1
 │   ├── run-phase9-tests.cmd
 │   ├── run-phase9-tests.ps1
+│   ├── run-phase10-tests.cmd
+│   ├── run-phase10-tests.ps1
 │   └── install-browser-native-host.ps1
 └── .github/workflows/ci.yml
 ```
@@ -367,3 +386,29 @@ test-logs\dragonforge-phase9-YYYYMMDD-HHMMSS.log.sha256
 ```
 
 See [docs/PHASE9_TESTING.md](docs/PHASE9_TESTING.md).
+
+
+## Phase 10 secure account recovery
+
+After synchronization and device enrollment are configured, open **Vault settings → Secure account recovery** and create an offline recovery kit. The kit is required if every authorized device is lost.
+
+To recover on a replacement computer, choose **Recover synchronized vault** on the welcome screen and provide the new local vault location, sync-server URL, recovery kit, and master password.
+
+A successful recovery rotates the sync token and recovery kit and revokes all previous device authorizations.
+
+See [docs/PHASE10_ACCOUNT_RECOVERY.md](docs/PHASE10_ACCOUNT_RECOVERY.md).
+
+## Automated Phase 10 verification
+
+```powershell
+.\scripts\run-phase10-tests.ps1
+```
+
+The runner creates:
+
+```text
+test-logs\dragonforge-phase10-YYYYMMDD-HHMMSS.log
+test-logs\dragonforge-phase10-YYYYMMDD-HHMMSS.log.sha256
+```
+
+See [docs/PHASE10_TESTING.md](docs/PHASE10_TESTING.md).

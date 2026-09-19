@@ -6,7 +6,7 @@ use zeroize::Zeroize;
 
 use crate::{
     AppStatus, CreateVaultResponse, DesktopService, DeviceSummary, ItemDraft, ItemDto,
-    ItemSummaryDto, SyncOutcome, SyncStatus,
+    ItemSummaryDto, RecoverVaultResponse, RecoverySetup, SyncOutcome, SyncStatus,
 };
 
 fn error_message(error: impl core::fmt::Display) -> String {
@@ -246,4 +246,52 @@ pub async fn revoke_device(
     })
     .await
     .map_err(error_message)?
+}
+
+
+#[tauri::command]
+pub async fn configure_recovery(
+    service: State<'_, DesktopService>,
+    mut account_secret_hex: String,
+) -> Result<RecoverySetup, String> {
+    let service = service.inner().clone();
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        let result = service
+            .configure_recovery(&account_secret_hex)
+            .map_err(error_message);
+        account_secret_hex.zeroize();
+        result
+    })
+    .await
+    .map_err(error_message)?;
+    result
+}
+
+#[tauri::command]
+pub async fn recover_synced_vault(
+    service: State<'_, DesktopService>,
+    destination: String,
+    server_url: String,
+    mut recovery_kit: String,
+    mut master_password: String,
+    device_name: Option<String>,
+) -> Result<RecoverVaultResponse, String> {
+    let service = service.inner().clone();
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        let result = service
+            .recover_synced_vault(
+                PathBuf::from(destination),
+                &server_url,
+                &recovery_kit,
+                &master_password,
+                device_name.as_deref(),
+            )
+            .map_err(error_message);
+        recovery_kit.zeroize();
+        master_password.zeroize();
+        result
+    })
+    .await
+    .map_err(error_message)?;
+    result
 }
