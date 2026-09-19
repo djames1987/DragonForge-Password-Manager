@@ -8,9 +8,7 @@ use async_trait::async_trait;
 use dragonforge_crypto::constant_time_eq;
 use uuid::Uuid;
 
-use crate::{
-    AccountRecord, DeviceRecord, DeviceStatus, RecoveryRecord, StoreError, StoredVault,
-};
+use crate::{AccountRecord, DeviceRecord, DeviceStatus, RecoveryRecord, StoreError, StoredVault};
 
 #[async_trait]
 pub trait SyncStore: Send + Sync {
@@ -228,7 +226,11 @@ impl SyncStore for InMemoryStore {
         envelope: Vec<u8>,
     ) -> Result<RecoveryRecord, StoreError> {
         let mut state = self.inner.lock().map_err(|_| StoreError::Internal)?;
-        if !state.accounts.iter().any(|account| account.account_id == account_id) {
+        if !state
+            .accounts
+            .iter()
+            .any(|account| account.account_id == account_id)
+        {
             return Err(StoreError::NotFound);
         }
         let generation = match state.recovery.get(&account_id) {
@@ -530,7 +532,10 @@ mod postgres {
             .await
             .map_err(|_| StoreError::Internal)?;
 
-            transaction.commit().await.map_err(|_| StoreError::Internal)?;
+            transaction
+                .commit()
+                .await
+                .map_err(|_| StoreError::Internal)?;
             let record = self.get_device(account_id, device_id).await?;
             Ok((record, first_device))
         }
@@ -618,7 +623,10 @@ mod postgres {
             .execute(&mut *transaction)
             .await
             .map_err(|_| StoreError::Internal)?;
-            transaction.commit().await.map_err(|_| StoreError::Internal)?;
+            transaction
+                .commit()
+                .await
+                .map_err(|_| StoreError::Internal)?;
             self.get_device(account_id, device_id).await
         }
 
@@ -651,8 +659,9 @@ mod postgres {
                 if stored_vault != vault_id {
                     return Err(StoreError::InvalidRecoveryState);
                 }
-                let current: i64 =
-                    row.try_get("generation").map_err(|_| StoreError::Internal)?;
+                let current: i64 = row
+                    .try_get("generation")
+                    .map_err(|_| StoreError::Internal)?;
                 u64::try_from(current)
                     .map_err(|_| StoreError::Internal)?
                     .checked_add(1)
@@ -660,8 +669,7 @@ mod postgres {
             } else {
                 1
             };
-            let generation_i64 =
-                i64::try_from(generation).map_err(|_| StoreError::Internal)?;
+            let generation_i64 = i64::try_from(generation).map_err(|_| StoreError::Internal)?;
 
             sqlx::query(
                 "INSERT INTO sync_recovery
@@ -682,7 +690,10 @@ mod postgres {
             .await
             .map_err(|_| StoreError::Internal)?;
 
-            transaction.commit().await.map_err(|_| StoreError::Internal)?;
+            transaction
+                .commit()
+                .await
+                .map_err(|_| StoreError::Internal)?;
             self.get_recovery(account_id).await
         }
 
@@ -729,10 +740,10 @@ mod postgres {
             .map_err(|_| StoreError::Internal)?
             .ok_or(StoreError::NotFound)?;
             let vault_id: Uuid = row.try_get("vault_id").map_err(|_| StoreError::Internal)?;
-            let generation_i64: i64 =
-                row.try_get("generation").map_err(|_| StoreError::Internal)?;
-            let generation =
-                u64::try_from(generation_i64).map_err(|_| StoreError::Internal)?;
+            let generation_i64: i64 = row
+                .try_get("generation")
+                .map_err(|_| StoreError::Internal)?;
+            let generation = u64::try_from(generation_i64).map_err(|_| StoreError::Internal)?;
             if generation != expected_generation {
                 return Err(StoreError::RecoveryGenerationConflict);
             }
@@ -800,7 +811,10 @@ mod postgres {
             .await
             .map_err(|_| StoreError::Internal)?;
 
-            transaction.commit().await.map_err(|_| StoreError::Internal)?;
+            transaction
+                .commit()
+                .await
+                .map_err(|_| StoreError::Internal)?;
             let device = self.get_device(account_id, replacement_device_id).await?;
             let recovery = self.get_recovery(account_id).await?;
             if recovery.vault_id != vault_id {
@@ -973,8 +987,9 @@ mod postgres {
         account_id: Uuid,
         row: sqlx::postgres::PgRow,
     ) -> Result<RecoveryRecord, StoreError> {
-        let generation_i64: i64 =
-            row.try_get("generation").map_err(|_| StoreError::Internal)?;
+        let generation_i64: i64 = row
+            .try_get("generation")
+            .map_err(|_| StoreError::Internal)?;
         let updated_i64: i64 = row
             .try_get("updated_at_ms")
             .map_err(|_| StoreError::Internal)?;
