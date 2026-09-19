@@ -159,3 +159,10 @@ Phase 9 does not yet provide:
 - per-request nonce replay storage beyond timestamp freshness.
 
 Those belong to later hardening/recovery/mobile phases.
+
+
+## Local sync removal caution
+
+Phase 9's **Remove sync** action removes the local sync sidecar, including the local ML-DSA signing seed. It does not automatically revoke the server-side device record.
+
+Before removing sync from an active device, ensure another active device is available to approve a replacement. Removing the only active device's local identity can leave the account without a usable approval key until a future recovery flow is implemented.
