@@ -81,3 +81,16 @@ Confirm that:
 - revoking all devices does not permit automatic trust re-bootstrap.
 
 Do not use real production credentials during Phase 9 testing.
+
+
+## Additional Phase 9 security regressions
+
+The Phase 9 lifecycle suite also verifies:
+
+- device enrollment requires a valid ML-DSA proof-of-possession;
+- a forged enrollment proof is rejected;
+- once any device record exists, bearer-token-only vault requests are rejected;
+- device request timestamps older than the permitted five-minute window are rejected;
+- revoked device identities cannot be transitioned back to active;
+- historical revoked-device records prevent first-device trust re-bootstrap;
+- legacy Phase 8 sidecars migrate to version 2 without losing synchronization history.
