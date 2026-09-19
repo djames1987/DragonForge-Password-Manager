@@ -2,9 +2,10 @@ use std::{
     fs::{self, OpenOptions},
     io::{Read, Write},
     path::{Path, PathBuf},
-    time::Duration,
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
+use dragonforge_crypto::MlDsa65KeyPair;
 use dragonforge_vault::{MAX_VAULT_FILE_BYTES, validate_encrypted_vault_bytes};
 use reqwest::{
     StatusCode,
@@ -15,12 +16,16 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 use url::Url;
+use uuid::Uuid;
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
-const SYNC_CONFIG_VERSION: u16 = 1;
+const SYNC_CONFIG_VERSION: u16 = 2;
 const HEADER_BASE_REVISION: &str = "x-dragonforge-base-revision";
 const HEADER_REVISION: &str = "x-dragonforge-revision";
 const HEADER_CONTENT_SHA256: &str = "x-dragonforge-content-sha256";
+const HEADER_DEVICE_ID: &str = "x-dragonforge-device-id";
+const HEADER_DEVICE_TIMESTAMP: &str = "x-dragonforge-device-timestamp";
+const HEADER_DEVICE_SIGNATURE: &str = "x-dragonforge-device-signature";
 
 #[derive(Debug, Error)]
 pub enum SyncError {
@@ -32,6 +37,8 @@ pub enum SyncError {
     Transport(String),
     #[error("sync server rejected authentication")]
     Unauthorized,
+    #[error("this device is not active; approve it from an already-authorized device")]
+    DeviceNotActive,
     #[error("sync server returned malformed metadata")]
     InvalidResponse,
     #[error("sync state could not be read or written: {0}")]
@@ -47,6 +54,8 @@ pub struct SyncStatus {
     pub server_url: Option<String>,
     pub last_revision: u64,
     pub last_content_sha256: Option<String>,
+    pub device_id: Option<String>,
+    pub device_name: Option<String>,
 }
 
 #[derive(Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -56,6 +65,17 @@ pub struct SyncOutcome {
     pub revision: u64,
     pub message: String,
     pub vault_locked: bool,
+}
+
+#[derive(Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct DeviceSummary {
+    pub device_id: String,
+    pub name: String,
+    pub status: String,
+    pub created_at_ms: u64,
+    pub approved_at_ms: Option<u64>,
+    pub revoked_at_ms: Option<u64>,
 }
 
 #[derive(Serialize, Deserialize, Zeroize, ZeroizeOnDrop)]
@@ -70,6 +90,14 @@ struct SyncConfig {
     last_revision: u64,
     #[zeroize(skip)]
     last_content_sha256: Option<String>,
+    #[zeroize(skip)]
+    #[serde(default)]
+    device_id: Option<String>,
+    #[zeroize(skip)]
+    #[serde(default)]
+    device_name: Option<String>,
+    #[serde(default)]
+    device_signing_seed_hex: Option<String>,
 }
 
 pub(crate) struct PullPayload {
@@ -83,6 +111,42 @@ pub(crate) struct SyncExecution {
     pub pull: Option<PullPayload>,
 }
 
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ServerDeviceSummary {
+    device_id: Uuid,
+    name: String,
+    status: ServerDeviceStatus,
+    created_at_ms: u64,
+    approved_at_ms: Option<u64>,
+    revoked_at_ms: Option<u64>,
+}
+
+#[derive(Clone, Copy, Deserialize)]
+#[serde(rename_all = "camelCase")]
+enum ServerDeviceStatus {
+    Pending,
+    Active,
+    Revoked,
+}
+
+impl ServerDeviceStatus {
+    const fn as_str(self) -> &'static str {
+        match self {
+            Self::Pending => "pending",
+            Self::Active => "active",
+            Self::Revoked => "revoked",
+        }
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct EnrollResponse {
+    device: ServerDeviceSummary,
+    first_device: bool,
+}
+
 pub(crate) fn configure(
     vault_path: &Path,
     server_url: &str,
@@ -91,13 +155,17 @@ pub(crate) fn configure(
     validate_server_url(server_url)?;
     validate_token(sync_token)?;
 
-    let config = SyncConfig {
+    let mut config = SyncConfig {
         version: SYNC_CONFIG_VERSION,
         server_url: server_url.trim_end_matches('/').to_owned(),
         sync_token: sync_token.to_owned(),
         last_revision: 0,
         last_content_sha256: None,
+        device_id: None,
+        device_name: None,
+        device_signing_seed_hex: None,
     };
+    ensure_device_identity(&mut config, None)?;
     save_config(vault_path, &config)?;
     Ok(status_from_config(&config))
 }
@@ -115,28 +183,99 @@ pub(crate) fn remove(vault_path: &Path) -> Result<SyncStatus, SyncError> {
             Err(error) => return Err(SyncError::Io(error.to_string())),
         }
     }
-    Ok(SyncStatus {
-        configured: false,
-        server_url: None,
-        last_revision: 0,
-        last_content_sha256: None,
-    })
+    Ok(empty_status())
 }
 
 pub(crate) fn status(vault_path: &Path) -> Result<SyncStatus, SyncError> {
     match load_config(vault_path)? {
         Some(config) => Ok(status_from_config(&config)),
-        None => Ok(SyncStatus {
-            configured: false,
-            server_url: None,
-            last_revision: 0,
-            last_content_sha256: None,
-        }),
+        None => Ok(empty_status()),
     }
+}
+
+pub(crate) fn enroll_device(
+    vault_path: &Path,
+    preferred_name: Option<&str>,
+) -> Result<DeviceSummary, SyncError> {
+    let mut config = load_config(vault_path)?.ok_or(SyncError::NotConfigured)?;
+    ensure_device_identity(&mut config, preferred_name)?;
+    let response = post_enrollment(&config)?;
+    if response.first_device && !matches!(response.device.status, ServerDeviceStatus::Active) {
+        return Err(SyncError::InvalidResponse);
+    }
+    save_config(vault_path, &config)?;
+    Ok(device_summary(response.device))
+}
+
+pub(crate) fn own_device_status(vault_path: &Path) -> Result<DeviceSummary, SyncError> {
+    let mut config = load_config(vault_path)?.ok_or(SyncError::NotConfigured)?;
+    ensure_device_identity(&mut config, None)?;
+    let device_id = device_id(&config)?;
+    let response = client()?
+        .get(format!("{}/v1/devices/{device_id}", config.server_url))
+        .header(AUTHORIZATION, bearer(&config.sync_token)?)
+        .send()
+        .map_err(|error| SyncError::Transport(error.to_string()))?;
+    if response.status() == StatusCode::NOT_FOUND {
+        return Err(SyncError::DeviceNotActive);
+    }
+    if response.status() == StatusCode::UNAUTHORIZED {
+        return Err(SyncError::Unauthorized);
+    }
+    if !response.status().is_success() {
+        return Err(SyncError::Transport(format!(
+            "server returned HTTP {}",
+            response.status()
+        )));
+    }
+    let device: ServerDeviceSummary = response.json().map_err(|_| SyncError::InvalidResponse)?;
+    save_config(vault_path, &config)?;
+    Ok(device_summary(device))
+}
+
+pub(crate) fn list_devices(vault_path: &Path) -> Result<Vec<DeviceSummary>, SyncError> {
+    let mut config = load_config(vault_path)?.ok_or(SyncError::NotConfigured)?;
+    ensure_active_device(vault_path, &mut config)?;
+    let path = "/v1/devices";
+    let timestamp = now_seconds()?;
+    let signature = sign_request(&config, "GET", path, timestamp, &[], None)?;
+    let response = client()?
+        .get(format!("{}{}", config.server_url, path))
+        .header(AUTHORIZATION, bearer(&config.sync_token)?)
+        .header(HEADER_DEVICE_ID, device_id(&config)?.to_string())
+        .header(HEADER_DEVICE_TIMESTAMP, timestamp.to_string())
+        .header(HEADER_DEVICE_SIGNATURE, signature)
+        .send()
+        .map_err(|error| SyncError::Transport(error.to_string()))?;
+    map_auth_status(&response)?;
+    if !response.status().is_success() {
+        return Err(SyncError::Transport(format!(
+            "server returned HTTP {}",
+            response.status()
+        )));
+    }
+    let devices: Vec<ServerDeviceSummary> =
+        response.json().map_err(|_| SyncError::InvalidResponse)?;
+    Ok(devices.into_iter().map(device_summary).collect())
+}
+
+pub(crate) fn approve_device(
+    vault_path: &Path,
+    target_device_id: &str,
+) -> Result<DeviceSummary, SyncError> {
+    device_decision(vault_path, target_device_id, "approve")
+}
+
+pub(crate) fn revoke_device(
+    vault_path: &Path,
+    target_device_id: &str,
+) -> Result<DeviceSummary, SyncError> {
+    device_decision(vault_path, target_device_id, "revoke")
 }
 
 pub(crate) fn sync(vault_path: &Path, vault_id: &str) -> Result<SyncExecution, SyncError> {
     let mut config = load_config(vault_path)?.ok_or(SyncError::NotConfigured)?;
+    ensure_active_device(vault_path, &mut config)?;
     let local = read_vault_bytes(vault_path)?;
     let local_hash = sha256_hex(&local);
     let remote = fetch_remote(&config, vault_id)?;
@@ -251,6 +390,7 @@ pub(crate) fn resolve(
     strategy: &str,
 ) -> Result<SyncExecution, SyncError> {
     let mut config = load_config(vault_path)?.ok_or(SyncError::NotConfigured)?;
+    ensure_active_device(vault_path, &mut config)?;
     match strategy {
         "keepLocal" => {
             let local = read_vault_bytes(vault_path)?;
@@ -307,6 +447,133 @@ pub(crate) fn commit_pull(
     save_config(vault_path, &config)
 }
 
+fn ensure_active_device(vault_path: &Path, config: &mut SyncConfig) -> Result<(), SyncError> {
+    ensure_device_identity(config, None)?;
+    let enrollment = post_enrollment(config)?;
+    save_config(vault_path, config)?;
+    match enrollment.device.status {
+        ServerDeviceStatus::Active => Ok(()),
+        ServerDeviceStatus::Pending | ServerDeviceStatus::Revoked => Err(SyncError::DeviceNotActive),
+    }
+}
+
+fn ensure_device_identity(
+    config: &mut SyncConfig,
+    preferred_name: Option<&str>,
+) -> Result<(), SyncError> {
+    if config.device_id.is_some() && config.device_signing_seed_hex.is_some() {
+        if let Some(name) = preferred_name.map(str::trim).filter(|value| !value.is_empty()) {
+            config.device_name = Some(validate_device_name(name)?.to_owned());
+        }
+        config.version = SYNC_CONFIG_VERSION;
+        return Ok(());
+    }
+
+    let device_id = Uuid::new_v4();
+    let key_pair = MlDsa65KeyPair::generate();
+    let seed = key_pair.export_seed();
+    let default_name = format!("DragonForge Desktop {}", &device_id.to_string()[..8]);
+    let name = preferred_name
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or(&default_name);
+    validate_device_name(name)?;
+
+    config.version = SYNC_CONFIG_VERSION;
+    config.device_id = Some(device_id.to_string());
+    config.device_name = Some(name.to_owned());
+    config.device_signing_seed_hex = Some(hex::encode(seed.as_slice()));
+    Ok(())
+}
+
+fn post_enrollment(config: &SyncConfig) -> Result<EnrollResponse, SyncError> {
+    let key_pair = device_key_pair(config)?;
+    let device_id = device_id(config)?;
+    let name = config
+        .device_name
+        .as_deref()
+        .ok_or_else(|| SyncError::InvalidConfig("missing device name".to_owned()))?;
+
+    #[derive(Serialize)]
+    #[serde(rename_all = "camelCase")]
+    struct Request<'a> {
+        device_id: Uuid,
+        name: &'a str,
+        verifying_key_hex: String,
+    }
+
+    let response = client()?
+        .post(format!("{}/v1/devices/enroll", config.server_url))
+        .header(AUTHORIZATION, bearer(&config.sync_token)?)
+        .json(&Request {
+            device_id,
+            name,
+            verifying_key_hex: hex::encode(key_pair.verifying_key().as_bytes()),
+        })
+        .send()
+        .map_err(|error| SyncError::Transport(error.to_string()))?;
+
+    if response.status() == StatusCode::UNAUTHORIZED {
+        return Err(SyncError::Unauthorized);
+    }
+    if !response.status().is_success() {
+        return Err(SyncError::Transport(format!(
+            "server returned HTTP {} during device enrollment",
+            response.status()
+        )));
+    }
+    response.json().map_err(|_| SyncError::InvalidResponse)
+}
+
+fn device_decision(
+    vault_path: &Path,
+    target_device_id: &str,
+    action: &str,
+) -> Result<DeviceSummary, SyncError> {
+    let mut config = load_config(vault_path)?.ok_or(SyncError::NotConfigured)?;
+    ensure_active_device(vault_path, &mut config)?;
+    let approver = device_id(&config)?;
+    let target = Uuid::parse_str(target_device_id)
+        .map_err(|_| SyncError::InvalidConfig("target device ID is invalid".to_owned()))?;
+    if action == "revoke" && approver == target {
+        return Err(SyncError::InvalidConfig(
+            "a device cannot revoke itself".to_owned(),
+        ));
+    }
+    let signature = hex::encode(
+        device_key_pair(&config)?.sign(&device_decision_message(approver, target, action)),
+    );
+
+    #[derive(Serialize)]
+    #[serde(rename_all = "camelCase")]
+    struct Request {
+        approver_device_id: Uuid,
+        signature_hex: String,
+    }
+
+    let response = client()?
+        .post(format!(
+            "{}/v1/devices/{target}/{action}",
+            config.server_url
+        ))
+        .header(AUTHORIZATION, bearer(&config.sync_token)?)
+        .json(&Request {
+            approver_device_id: approver,
+            signature_hex: signature,
+        })
+        .send()
+        .map_err(|error| SyncError::Transport(error.to_string()))?;
+    map_auth_status(&response)?;
+    if !response.status().is_success() {
+        return Err(SyncError::Transport(format!(
+            "server returned HTTP {} during device {action}",
+            response.status()
+        )));
+    }
+    let device: ServerDeviceSummary = response.json().map_err(|_| SyncError::InvalidResponse)?;
+    Ok(device_summary(device))
+}
+
 fn conflict_outcome(action: &str, revision: u64, message: &str) -> SyncExecution {
     SyncExecution {
         outcome: SyncOutcome {
@@ -331,18 +598,22 @@ struct UploadMetadata {
 }
 
 fn fetch_remote(config: &SyncConfig, vault_id: &str) -> Result<Option<RemoteVault>, SyncError> {
+    let path = format!("/v1/vaults/{vault_id}");
+    let timestamp = now_seconds()?;
+    let signature = sign_request(config, "GET", &path, timestamp, &[], None)?;
     let response = client()?
-        .get(format!("{}/v1/vaults/{vault_id}", config.server_url))
+        .get(format!("{}{}", config.server_url, path))
         .header(AUTHORIZATION, bearer(&config.sync_token)?)
+        .header(HEADER_DEVICE_ID, device_id(config)?.to_string())
+        .header(HEADER_DEVICE_TIMESTAMP, timestamp.to_string())
+        .header(HEADER_DEVICE_SIGNATURE, signature)
         .send()
         .map_err(|error| SyncError::Transport(error.to_string()))?;
 
     if response.status() == StatusCode::NOT_FOUND {
         return Ok(None);
     }
-    if response.status() == StatusCode::UNAUTHORIZED {
-        return Err(SyncError::Unauthorized);
-    }
+    map_auth_status(&response)?;
     if !response.status().is_success() {
         return Err(SyncError::Transport(format!(
             "server returned HTTP {}",
@@ -370,18 +641,29 @@ fn upload(
     base_revision: u64,
     bytes: &[u8],
 ) -> Result<UploadMetadata, SyncError> {
+    let path = format!("/v1/vaults/{vault_id}");
+    let timestamp = now_seconds()?;
+    let signature = sign_request(
+        config,
+        "PUT",
+        &path,
+        timestamp,
+        bytes,
+        Some(base_revision),
+    )?;
     let response = client()?
-        .put(format!("{}/v1/vaults/{vault_id}", config.server_url))
+        .put(format!("{}{}", config.server_url, path))
         .header(AUTHORIZATION, bearer(&config.sync_token)?)
+        .header(HEADER_DEVICE_ID, device_id(config)?.to_string())
+        .header(HEADER_DEVICE_TIMESTAMP, timestamp.to_string())
+        .header(HEADER_DEVICE_SIGNATURE, signature)
         .header(HEADER_BASE_REVISION, base_revision.to_string())
         .header("content-type", "application/octet-stream")
         .body(bytes.to_vec())
         .send()
         .map_err(|error| SyncError::Transport(error.to_string()))?;
 
-    if response.status() == StatusCode::UNAUTHORIZED {
-        return Err(SyncError::Unauthorized);
-    }
+    map_auth_status(&response)?;
     if response.status() == StatusCode::CONFLICT {
         return Err(SyncError::Transport(
             "server revision changed while uploading; run sync again".to_owned(),
@@ -423,6 +705,92 @@ fn upload(
         revision: metadata.revision,
         content_sha256: metadata.content_sha256,
     })
+}
+
+fn sign_request(
+    config: &SyncConfig,
+    method: &str,
+    path: &str,
+    timestamp: u64,
+    body: &[u8],
+    base_revision: Option<u64>,
+) -> Result<String, SyncError> {
+    let message = request_signature_message(method, path, timestamp, body, base_revision);
+    Ok(hex::encode(device_key_pair(config)?.sign(&message)))
+}
+
+fn request_signature_message(
+    method: &str,
+    path: &str,
+    timestamp: u64,
+    body: &[u8],
+    base_revision: Option<u64>,
+) -> Vec<u8> {
+    format!(
+        "dragonforge/device-request/v1\n{}\n{}\n{}\n{}\n{}",
+        method,
+        path,
+        timestamp,
+        sha256_hex(body),
+        base_revision
+            .map(|value| value.to_string())
+            .unwrap_or_default()
+    )
+    .into_bytes()
+}
+
+fn device_decision_message(
+    approver_device_id: Uuid,
+    target_device_id: Uuid,
+    action: &str,
+) -> Vec<u8> {
+    format!(
+        "dragonforge/device-decision/v1\n{}\n{}\n{}",
+        action, approver_device_id, target_device_id
+    )
+    .into_bytes()
+}
+
+fn device_key_pair(config: &SyncConfig) -> Result<MlDsa65KeyPair, SyncError> {
+    let seed_hex = config
+        .device_signing_seed_hex
+        .as_deref()
+        .ok_or_else(|| SyncError::InvalidConfig("missing device signing key".to_owned()))?;
+    let mut seed = hex::decode(seed_hex)
+        .map_err(|_| SyncError::InvalidConfig("device signing key is invalid".to_owned()))?;
+    let result = MlDsa65KeyPair::from_seed(&seed)
+        .map_err(|_| SyncError::InvalidConfig("device signing key is invalid".to_owned()));
+    seed.zeroize();
+    result
+}
+
+fn device_id(config: &SyncConfig) -> Result<Uuid, SyncError> {
+    config
+        .device_id
+        .as_deref()
+        .and_then(|value| Uuid::parse_str(value).ok())
+        .ok_or_else(|| SyncError::InvalidConfig("missing device identity".to_owned()))
+}
+
+fn device_summary(device: ServerDeviceSummary) -> DeviceSummary {
+    DeviceSummary {
+        device_id: device.device_id.to_string(),
+        name: device.name,
+        status: device.status.as_str().to_owned(),
+        created_at_ms: device.created_at_ms,
+        approved_at_ms: device.approved_at_ms,
+        revoked_at_ms: device.revoked_at_ms,
+    }
+}
+
+fn map_auth_status(response: &Response) -> Result<(), SyncError> {
+    if response.status() == StatusCode::UNAUTHORIZED {
+        Err(SyncError::Unauthorized)
+    } else if response.status() == StatusCode::FORBIDDEN {
+        Err(SyncError::DeviceNotActive)
+    } else {
+        Ok(())
+    }
 }
 
 fn client() -> Result<Client, SyncError> {
@@ -523,6 +891,23 @@ fn validate_token(token: &str) -> Result<(), SyncError> {
     }
 }
 
+fn validate_device_name(name: &str) -> Result<&str, SyncError> {
+    if name.is_empty() || name.len() > 120 {
+        Err(SyncError::InvalidConfig(
+            "device name must contain 1 to 120 characters".to_owned(),
+        ))
+    } else {
+        Ok(name)
+    }
+}
+
+fn now_seconds() -> Result<u64, SyncError> {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|value| value.as_secs())
+        .map_err(|_| SyncError::InvalidResponse)
+}
+
 fn sha256_hex(bytes: &[u8]) -> String {
     hex::encode(Sha256::digest(bytes))
 }
@@ -548,14 +933,17 @@ fn load_config(vault_path: &Path) -> Result<Option<SyncConfig>, SyncError> {
     let parsed =
         serde_json::from_slice(&bytes).map_err(|error| SyncError::InvalidConfig(error.to_string()));
     bytes.zeroize();
-    let config: SyncConfig = parsed?;
-    if config.version != SYNC_CONFIG_VERSION {
+    let mut config: SyncConfig = parsed?;
+    if !matches!(config.version, 1 | SYNC_CONFIG_VERSION) {
         return Err(SyncError::InvalidConfig(
             "unsupported sync configuration version".to_owned(),
         ));
     }
     validate_server_url(&config.server_url)?;
     validate_token(&config.sync_token)?;
+    if config.version == 1 {
+        config.version = SYNC_CONFIG_VERSION;
+    }
     Ok(Some(config))
 }
 
@@ -648,6 +1036,19 @@ fn status_from_config(config: &SyncConfig) -> SyncStatus {
         server_url: Some(config.server_url.clone()),
         last_revision: config.last_revision,
         last_content_sha256: config.last_content_sha256.clone(),
+        device_id: config.device_id.clone(),
+        device_name: config.device_name.clone(),
+    }
+}
+
+fn empty_status() -> SyncStatus {
+    SyncStatus {
+        configured: false,
+        server_url: None,
+        last_revision: 0,
+        last_content_sha256: None,
+        device_id: None,
+        device_name: None,
     }
 }
 
@@ -669,5 +1070,16 @@ mod tests {
         assert!(validate_token(&"a".repeat(64)).is_ok());
         assert!(validate_token(&"g".repeat(64)).is_err());
         assert!(validate_token(&"a".repeat(63)).is_err());
+    }
+
+    #[test]
+    fn request_transcript_changes_when_body_or_revision_changes() {
+        let timestamp = 42;
+        let one = request_signature_message("PUT", "/v1/vaults/test", timestamp, b"one", Some(1));
+        let two = request_signature_message("PUT", "/v1/vaults/test", timestamp, b"two", Some(1));
+        let revision =
+            request_signature_message("PUT", "/v1/vaults/test", timestamp, b"one", Some(2));
+        assert_ne!(one, two);
+        assert_ne!(one, revision);
     }
 }
