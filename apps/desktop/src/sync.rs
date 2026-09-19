@@ -162,9 +162,7 @@ pub(crate) fn sync(vault_path: &Path, vault_id: &str) -> Result<SyncExecution, S
             config.last_revision,
             "The remote vault disappeared after a previous sync; no data was changed.",
         )),
-        Some(remote)
-            if config.last_revision == 0 && config.last_content_sha256.is_none() =>
-        {
+        Some(remote) if config.last_revision == 0 && config.last_content_sha256.is_none() => {
             Ok(conflict_outcome(
                 "initialConflict",
                 remote.revision,
@@ -256,8 +254,8 @@ pub(crate) fn resolve(
     match strategy {
         "keepLocal" => {
             let local = read_vault_bytes(vault_path)?;
-            let current_remote_revision = fetch_remote(&config, vault_id)?
-                .map_or(0, |remote| remote.revision);
+            let current_remote_revision =
+                fetch_remote(&config, vault_id)?.map_or(0, |remote| remote.revision);
             let metadata = upload(&config, vault_id, current_remote_revision, &local)?;
             config.last_revision = metadata.revision;
             config.last_content_sha256 = Some(metadata.content_sha256.clone());
@@ -273,9 +271,8 @@ pub(crate) fn resolve(
             })
         }
         "keepRemote" => {
-            let remote = fetch_remote(&config, vault_id)?.ok_or_else(|| {
-                SyncError::Transport("remote vault does not exist".to_owned())
-            })?;
+            let remote = fetch_remote(&config, vault_id)?
+                .ok_or_else(|| SyncError::Transport("remote vault does not exist".to_owned()))?;
             validate_remote_bytes(&remote.bytes, vault_id)?;
             Ok(SyncExecution {
                 outcome: SyncOutcome {
@@ -404,9 +401,7 @@ fn upload(
         content_sha256: String,
     }
 
-    let metadata: Metadata = response
-        .json()
-        .map_err(|_| SyncError::InvalidResponse)?;
+    let metadata: Metadata = response.json().map_err(|_| SyncError::InvalidResponse)?;
     if metadata.content_sha256.len() != 64
         || !metadata
             .content_sha256
@@ -550,8 +545,8 @@ fn load_config(vault_path: &Path) -> Result<Option<SyncConfig>, SyncError> {
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
         Err(error) => return Err(SyncError::Io(error.to_string())),
     };
-    let parsed = serde_json::from_slice(&bytes)
-        .map_err(|error| SyncError::InvalidConfig(error.to_string()));
+    let parsed =
+        serde_json::from_slice(&bytes).map_err(|error| SyncError::InvalidConfig(error.to_string()));
     bytes.zeroize();
     let config: SyncConfig = parsed?;
     if config.version != SYNC_CONFIG_VERSION {
