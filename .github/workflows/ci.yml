@@ -68,6 +68,9 @@ jobs:
       - name: Debug workspace tests
         run: cargo test --workspace --all-features
 
+      - name: Phase 11 protected-sidecar unit tests
+        run: cargo test -p dragonforge-desktop --lib sync::tests::protected_v3_disk_config_omits_sync_secrets
+
       - name: Phase 10 recovery server tests
         run: cargo test -p dragonforge-sync-server --test account_recovery -- --nocapture
 
@@ -131,7 +134,8 @@ jobs:
             'scripts/run-phase7-tests.ps1',
             'scripts/run-phase8-tests.ps1',
             'scripts/run-phase9-tests.ps1',
-            'scripts/run-phase10-tests.ps1'
+            'scripts/run-phase10-tests.ps1',
+            'scripts/run-phase11-tests.ps1'
           )
           foreach ($file in $files) {
             $tokens = $null
@@ -157,6 +161,9 @@ jobs:
 
       - name: Run sync server API tests
         run: cargo test -p dragonforge-sync-server --test sync_api -- --nocapture
+
+      - name: Run Phase 11 Windows credential protection test
+        run: cargo test -p dragonforge-desktop --test secret_storage -- --nocapture
 
       - name: Run Phase 10 recovery server tests
         run: cargo test -p dragonforge-sync-server --test account_recovery -- --nocapture
