@@ -45,6 +45,10 @@ impl AppState {
             admin_token_hash: admin_token.map(hash_sync_token),
         }
     }
+
+    pub(crate) fn store(&self) -> &Arc<dyn SyncStore> {
+        &self.store
+    }
 }
 
 pub fn build_router(state: AppState) -> Router {
@@ -62,7 +66,8 @@ pub fn build_router(state: AppState) -> Router {
             StatusCode::REQUEST_TIMEOUT,
             Duration::from_secs(30),
         ))
-        .with_state(state)
+        .with_state(state.clone())
+        .merge(crate::recovery::router(state))
 }
 
 async fn health() -> Json<HealthResponse> {
