@@ -105,7 +105,7 @@ async fn enroll_device(
 ) -> Result<(StatusCode, Json<EnrollDeviceResponse>), ApiError> {
     let account_id = authenticate_account(&state, &headers).await?;
     let name = request.name.trim();
-    if name.is_empty() || name.len() > 120 {
+    if name.is_empty() || name.chars().count() > 120 {
         return Err(ApiError::BadRequest(
             "device name must contain 1 to 120 characters".to_owned(),
         ));
