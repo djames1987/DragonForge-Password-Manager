@@ -516,8 +516,11 @@
       $("sync-status-title").textContent = status.configured
         ? "Sync configured"
         : "Sync not configured";
+      const secretStorage = status.secretStorage === "windowsCredentialManager"
+        ? "Windows Credential Manager"
+        : "legacy sidecar storage";
       $("sync-status-detail").textContent = status.configured
-        ? (status.serverUrl + " · revision " + status.lastRevision)
+        ? (status.serverUrl + " · revision " + status.lastRevision + " · secrets: " + secretStorage)
         : "Configure a server and 256-bit sync token to begin.";
       if (status.serverUrl) $("sync-server-url").value = status.serverUrl;
       $("settings-sync-now").disabled = !status.configured;
