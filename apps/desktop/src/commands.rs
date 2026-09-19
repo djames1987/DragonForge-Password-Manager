@@ -5,8 +5,8 @@ use tauri::State;
 use zeroize::Zeroize;
 
 use crate::{
-    AppStatus, CreateVaultResponse, DesktopService, ItemDraft, ItemDto, ItemSummaryDto,
-    SyncOutcome, SyncStatus,
+    AppStatus, CreateVaultResponse, DesktopService, DeviceSummary, ItemDraft, ItemDto,
+    ItemSummaryDto, SyncOutcome, SyncStatus,
 };
 
 fn error_message(error: impl core::fmt::Display) -> String {
@@ -186,4 +186,64 @@ pub async fn resolve_sync_conflict(
 #[tauri::command]
 pub fn remove_sync(service: State<'_, DesktopService>) -> Result<SyncStatus, String> {
     service.remove_sync().map_err(error_message)
+}
+
+
+#[tauri::command]
+pub async fn enroll_device(
+    service: State<'_, DesktopService>,
+    name: Option<String>,
+) -> Result<DeviceSummary, String> {
+    let service = service.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        service.enroll_device(name.as_deref()).map_err(error_message)
+    })
+    .await
+    .map_err(error_message)?
+}
+
+#[tauri::command]
+pub async fn own_device_status(
+    service: State<'_, DesktopService>,
+) -> Result<DeviceSummary, String> {
+    let service = service.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || service.own_device_status().map_err(error_message))
+        .await
+        .map_err(error_message)?
+}
+
+#[tauri::command]
+pub async fn list_devices(
+    service: State<'_, DesktopService>,
+) -> Result<Vec<DeviceSummary>, String> {
+    let service = service.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || service.list_devices().map_err(error_message))
+        .await
+        .map_err(error_message)?
+}
+
+#[tauri::command]
+pub async fn approve_device(
+    service: State<'_, DesktopService>,
+    device_id: String,
+) -> Result<DeviceSummary, String> {
+    let service = service.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        service.approve_device(&device_id).map_err(error_message)
+    })
+    .await
+    .map_err(error_message)?
+}
+
+#[tauri::command]
+pub async fn revoke_device(
+    service: State<'_, DesktopService>,
+    device_id: String,
+) -> Result<DeviceSummary, String> {
+    let service = service.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        service.revoke_device(&device_id).map_err(error_message)
+    })
+    .await
+    .map_err(error_message)?
 }
