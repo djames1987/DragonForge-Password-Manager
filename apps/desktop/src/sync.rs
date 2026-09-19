@@ -467,10 +467,10 @@ fn parse_hash_header(response: &Response) -> Result<String, SyncError> {
 fn read_response_bytes(mut response: Response) -> Result<Vec<u8>, SyncError> {
     let mut bytes = Vec::new();
     response
-        .take((MAX_VAULT_FILE_BYTES + 1) as u64)
+        .take(MAX_VAULT_FILE_BYTES + 1)
         .read_to_end(&mut bytes)
         .map_err(|error| SyncError::Transport(error.to_string()))?;
-    if bytes.len() > MAX_VAULT_FILE_BYTES {
+    if bytes.len() as u64 > MAX_VAULT_FILE_BYTES {
         return Err(SyncError::InvalidResponse);
     }
     Ok(bytes)
@@ -489,7 +489,7 @@ fn validate_remote_bytes(bytes: &[u8], expected_vault_id: &str) -> Result<(), Sy
 
 fn read_vault_bytes(path: &Path) -> Result<Vec<u8>, SyncError> {
     let metadata = fs::metadata(path).map_err(|error| SyncError::Io(error.to_string()))?;
-    if metadata.len() > MAX_VAULT_FILE_BYTES as u64 {
+    if metadata.len() > MAX_VAULT_FILE_BYTES {
         return Err(SyncError::InvalidConfig(
             "local vault exceeds sync size limit".to_owned(),
         ));
