@@ -442,9 +442,7 @@ impl DesktopService {
         let execution = crate::sync::resolve(&path, &vault_id, strategy)?;
 
         if let Some(pull) = execution.pull {
-            session
-                .vault
-                .verify_encrypted_snapshot(&pull.bytes)?;
+            session.vault.verify_encrypted_snapshot(&pull.bytes)?;
             session_guard.take();
             crate::sync::commit_pull(&path, &vault_id, pull)?;
         }
