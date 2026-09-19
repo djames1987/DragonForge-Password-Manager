@@ -426,9 +426,7 @@ impl DesktopService {
         let execution = crate::sync::sync(&path, &vault_id)?;
 
         if let Some(pull) = execution.pull {
-            session
-                .vault
-                .verify_encrypted_snapshot(&pull.bytes)?;
+            session.vault.verify_encrypted_snapshot(&pull.bytes)?;
             session_guard.take();
             crate::sync::commit_pull(&path, &vault_id, pull)?;
         }
@@ -436,10 +434,7 @@ impl DesktopService {
         Ok(execution.outcome)
     }
 
-    pub fn resolve_sync_conflict(
-        &self,
-        strategy: &str,
-    ) -> DesktopResult<crate::sync::SyncOutcome> {
+    pub fn resolve_sync_conflict(&self, strategy: &str) -> DesktopResult<crate::sync::SyncOutcome> {
         let mut session_guard = self.lock_session()?;
         let session = session_guard.as_ref().ok_or(DesktopError::Locked)?;
         let path = session.path.clone();
