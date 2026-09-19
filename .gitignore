@@ -10,3 +10,11 @@ Thumbs.db
 .env.*
 !.env.example
 /test-logs/
+
+# DragonForge vaults and per-vault sync credentials/state
+*.dfvault
+*.dfvault.bak
+*.dfvault.tmp
+*.dfvault.sync.json
+*.dfvault.sync.json.tmp
+*.dfvault.sync.json.bak
