@@ -134,6 +134,11 @@ async fn configure_recovery(
         .verify(&message, &signature)
         .map_err(|_| ApiError::Forbidden)?;
 
+    state
+        .store()
+        .get_vault(account_id, request.vault_id)
+        .await?;
+
     let record = state
         .store()
         .configure_recovery(
@@ -158,7 +163,6 @@ async fn begin_recovery(
     State(state): State<AppState>,
     Json(request): Json<RecoveryAuthRequest>,
 ) -> Result<Json<RecoveryBeginResponse>, ApiError> {
-    check_rate_limit(request.account_id)?;
     let record = authenticate_recovery(&state, &request, "begin").await?;
     Ok(Json(RecoveryBeginResponse {
         generation: record.generation,
@@ -170,7 +174,6 @@ async fn fetch_recovery_vault(
     State(state): State<AppState>,
     Json(request): Json<RecoveryAuthRequest>,
 ) -> Result<Response, ApiError> {
-    check_rate_limit(request.account_id)?;
     let record = authenticate_recovery(&state, &request, "vault").await?;
     let stored = state
         .store()
@@ -196,12 +199,12 @@ async fn complete_recovery(
     State(state): State<AppState>,
     Json(request): Json<CompleteRecoveryRequest>,
 ) -> Result<Json<CompleteRecoveryResponse>, ApiError> {
-    check_rate_limit(request.account_id)?;
     validate_timestamp(request.timestamp)?;
     validate_nonce(&request.nonce_hex)?;
     validate_device_name(&request.replacement_name)?;
 
     let record = state.store().get_recovery(request.account_id).await?;
+    check_rate_limit(request.account_id)?;
     if record.vault_id != request.vault_id {
         return Err(ApiError::Forbidden);
     }
@@ -289,6 +292,7 @@ async fn authenticate_recovery(
     validate_timestamp(request.timestamp)?;
     validate_nonce(&request.nonce_hex)?;
     let record = state.store().get_recovery(request.account_id).await?;
+    check_rate_limit(request.account_id)?;
     if record.vault_id != request.vault_id {
         return Err(ApiError::Forbidden);
     }
@@ -383,13 +387,16 @@ fn check_rate_limit(account_id: Uuid) -> Result<(), ApiError> {
     let now = now_seconds()?;
     let attempts = RECOVERY_ATTEMPTS.get_or_init(|| Mutex::new(HashMap::new()));
     let mut attempts = attempts.lock().map_err(|_| ApiError::Unavailable)?;
+    attempts.retain(|_, entries| {
+        while entries
+            .front()
+            .is_some_and(|time| now.saturating_sub(*time) > ATTEMPT_WINDOW_SECONDS)
+        {
+            entries.pop_front();
+        }
+        !entries.is_empty()
+    });
     let entries = attempts.entry(account_id).or_default();
-    while entries
-        .front()
-        .is_some_and(|time| now.saturating_sub(*time) > ATTEMPT_WINDOW_SECONDS)
-    {
-        entries.pop_front();
-    }
     if entries.len() >= MAX_ATTEMPTS_PER_WINDOW {
         return Err(ApiError::BadRequest(
             "too many recovery attempts; wait five minutes before retrying".to_owned(),
