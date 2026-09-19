@@ -2,6 +2,8 @@
 
 DragonForge Password Manager is a security-first, zero-knowledge password manager project designed for long-term cryptographic agility and post-quantum migration.
 
+> 📘 **[View the detailed visual product overview](docs/PRODUCT_OVERVIEW.md)** — feature tour, architecture diagrams, recovery flow, security model, examples, and current limitations.
+
 > **Development status:** Phase 11 — Windows Credential Protection & Sidecar Secret Migration **IMPLEMENTED; WINDOWS VERIFICATION PENDING**
 
 ## Completed phases
