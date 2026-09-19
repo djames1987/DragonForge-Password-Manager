@@ -241,7 +241,10 @@ fn tampered_remote_snapshot_is_rejected_before_local_replacement() {
         .unwrap();
     assert!(response.status().is_success());
 
-    let error = device.sync_now().unwrap_err();
+    let error = match device.sync_now() {
+        Ok(_) => panic!("tampered remote snapshot was accepted"),
+        Err(error) => error,
+    };
     assert!(
         error.to_string().contains("integrity")
             || error.to_string().contains("decrypt")
