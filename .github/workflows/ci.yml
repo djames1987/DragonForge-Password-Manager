@@ -105,6 +105,7 @@ jobs:
           components: rustfmt, clippy
 
       - name: Cache Rust build
+        continue-on-error: true
         uses: Swatinem/rust-cache@v2
 
       - name: Check PowerShell browser scripts
