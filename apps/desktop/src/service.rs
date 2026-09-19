@@ -418,6 +418,45 @@ impl DesktopService {
         Ok(crate::sync::remove(&session.path)?)
     }
 
+    pub fn enroll_device(
+        &self,
+        name: Option<&str>,
+    ) -> DesktopResult<crate::sync::DeviceSummary> {
+        let session = self.lock_session()?;
+        let session = session.as_ref().ok_or(DesktopError::Locked)?;
+        Ok(crate::sync::enroll_device(&session.path, name)?)
+    }
+
+    pub fn own_device_status(&self) -> DesktopResult<crate::sync::DeviceSummary> {
+        let session = self.lock_session()?;
+        let session = session.as_ref().ok_or(DesktopError::Locked)?;
+        Ok(crate::sync::own_device_status(&session.path)?)
+    }
+
+    pub fn list_devices(&self) -> DesktopResult<Vec<crate::sync::DeviceSummary>> {
+        let session = self.lock_session()?;
+        let session = session.as_ref().ok_or(DesktopError::Locked)?;
+        Ok(crate::sync::list_devices(&session.path)?)
+    }
+
+    pub fn approve_device(
+        &self,
+        device_id: &str,
+    ) -> DesktopResult<crate::sync::DeviceSummary> {
+        let session = self.lock_session()?;
+        let session = session.as_ref().ok_or(DesktopError::Locked)?;
+        Ok(crate::sync::approve_device(&session.path, device_id)?)
+    }
+
+    pub fn revoke_device(
+        &self,
+        device_id: &str,
+    ) -> DesktopResult<crate::sync::DeviceSummary> {
+        let session = self.lock_session()?;
+        let session = session.as_ref().ok_or(DesktopError::Locked)?;
+        Ok(crate::sync::revoke_device(&session.path, device_id)?)
+    }
+
     pub fn sync_now(&self) -> DesktopResult<crate::sync::SyncOutcome> {
         let mut session_guard = self.lock_session()?;
         let session = session_guard.as_ref().ok_or(DesktopError::Locked)?;
