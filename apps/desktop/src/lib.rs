@@ -13,7 +13,7 @@ pub use service::{
     AppStatus, BrowserCredential, BrowserLoginSummary, CreateVaultResponse, DesktopError,
     DesktopService, ItemDraft, ItemDto, ItemSummaryDto,
 };
-pub use sync::{SyncError, SyncOutcome, SyncStatus};
+pub use sync::{DeviceSummary, SyncError, SyncOutcome, SyncStatus};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -44,6 +44,11 @@ pub fn run() {
             commands::sync_now,
             commands::resolve_sync_conflict,
             commands::remove_sync,
+            commands::enroll_device,
+            commands::own_device_status,
+            commands::list_devices,
+            commands::approve_device,
+            commands::revoke_device,
         ])
         .run(tauri::generate_context!())
         .expect("DragonForge desktop runtime failed");
