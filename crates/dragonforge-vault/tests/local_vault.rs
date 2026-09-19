@@ -240,6 +240,29 @@ fn ciphertext_tampering_is_detected() {
 }
 
 #[test]
+fn remote_snapshot_tampering_is_rejected_before_sync_replacement() {
+    let temp = tempdir().unwrap();
+    let path = temp.path().join("snapshot-tamper.dfvault");
+    let (mut vault, _secret) = Vault::create(&path, MASTER).unwrap();
+    vault
+        .add_secure_note("Remote snapshot", "authenticated sync body", vec![])
+        .unwrap();
+
+    let raw = fs::read(&path).unwrap();
+    assert!(vault.verify_encrypted_snapshot(&raw).is_ok());
+
+    let mut json: serde_json::Value = serde_json::from_slice(&raw).unwrap();
+    let ciphertext = json["items"][0]["payload"]["ciphertext"]
+        .as_array_mut()
+        .unwrap();
+    let value = ciphertext[0].as_u64().unwrap();
+    ciphertext[0] = serde_json::Value::from(value ^ 0x40);
+    let tampered = serde_json::to_vec_pretty(&json).unwrap();
+
+    assert!(vault.verify_encrypted_snapshot(&tampered).is_err());
+}
+
+#[test]
 fn password_generator_honors_policy() {
     let password = generate_password(PasswordPolicy {
         length: 32,
