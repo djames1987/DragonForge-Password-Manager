@@ -5,6 +5,7 @@ mod api;
 mod auth;
 mod error;
 mod model;
+mod recovery;
 mod store;
 
 pub use api::{AppState, build_router};
@@ -13,7 +14,7 @@ pub use error::{ApiError, StoreError};
 pub use model::{
     AccountRecord, AccountResponse, DeviceDecisionRequest, DeviceRecord, DeviceStatus,
     DeviceSummary, EnrollDeviceRequest, EnrollDeviceResponse, HealthResponse, MAX_SYNC_BLOB_BYTES,
-    SYNC_PROTOCOL_VERSION, StoredVault, SyncMetadata,
+    SYNC_PROTOCOL_VERSION, StoredVault, SyncMetadata, RecoveryRecord, MAX_RECOVERY_ENVELOPE_BYTES,
 };
 pub use store::{InMemoryStore, SyncStore};
 
