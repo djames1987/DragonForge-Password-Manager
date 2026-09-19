@@ -412,6 +412,10 @@ fn map_desktop_error(error: DesktopError) -> BrowserResponse {
             "DragonForge desktop state is unavailable",
         ),
         DesktopError::Vault(error) => BrowserResponse::error("vaultError", error.to_string()),
+        DesktopError::Sync(_) => BrowserResponse::error(
+            "desktopUnavailable",
+            "DragonForge desktop synchronization state is unavailable",
+        ),
         DesktopError::InvalidAccountSecret => {
             BrowserResponse::error("invalidRequest", "invalid Account Secret")
         }
