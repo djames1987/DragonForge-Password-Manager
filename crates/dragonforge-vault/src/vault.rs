@@ -390,6 +390,34 @@ impl Vault {
         Ok(())
     }
 
+    pub fn verify_encrypted_snapshot(&self, bytes: &[u8]) -> Result<()> {
+        if bytes.len() > crate::MAX_VAULT_FILE_BYTES {
+            return Err(VaultError::ResourceLimit(format!(
+                "vault payload is {} bytes; maximum is {} bytes",
+                bytes.len(),
+                crate::MAX_VAULT_FILE_BYTES
+            )));
+        }
+
+        let file: VaultFile = serde_json::from_slice(bytes)?;
+        validate_vault_file(&file)?;
+        if file.vault_id != self.file.vault_id {
+            return Err(VaultError::InvalidStructure(
+                "remote vault ID does not match the unlocked vault".to_owned(),
+            ));
+        }
+
+        for record in &file.items {
+            let item = self
+                .decrypt_item(record)
+                .map_err(|_| VaultError::IntegrityFailure(record.id.clone()))?;
+            if item.id != record.id {
+                return Err(VaultError::IntegrityFailure(record.id.clone()));
+            }
+        }
+        Ok(())
+    }
+
     pub fn change_master_password(
         &mut self,
         new_master_password: &str,
