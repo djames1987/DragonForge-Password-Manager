@@ -426,6 +426,9 @@ impl DesktopService {
         let execution = crate::sync::sync(&path, &vault_id)?;
 
         if let Some(pull) = execution.pull {
+            session
+                .vault
+                .verify_encrypted_snapshot(&pull.bytes)?;
             session_guard.take();
             crate::sync::commit_pull(&path, &vault_id, pull)?;
         }
