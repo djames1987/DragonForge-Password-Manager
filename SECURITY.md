@@ -63,7 +63,7 @@ The project contains working cryptographic primitives, post-quantum/hybrid compo
 - Account provisioning is disabled unless a server admin token is configured.
 - Server logs must not contain bearer tokens, admin tokens, or synchronized ciphertext bodies.
 - Phase 8 desktop synchronization compares local ciphertext hashes with the last synchronized hash and the server revision before modifying either side.
-- A remote pull structurally validates the encrypted vault, locks the active desktop vault, then atomically replaces the local encrypted file.
+- A remote pull verifies the server SHA-256, validates the encrypted vault structure and vault UUID, authenticates every encrypted item with the unlocked vault keys, locks the active desktop vault, then atomically replaces the local encrypted file.
 - If both local and remote state changed, automatic synchronization stops and requires an explicit Keep Local or Keep Remote choice.
 - Server revision rollback, same-revision ciphertext mismatch, and disappearance of a previously synchronized remote vault are treated as safety failures rather than normal updates.
 - Non-loopback sync endpoints must use HTTPS. Plain HTTP is accepted only for local development on loopback addresses.
