@@ -391,7 +391,7 @@ impl Vault {
     }
 
     pub fn verify_encrypted_snapshot(&self, bytes: &[u8]) -> Result<()> {
-        if bytes.len() > crate::MAX_VAULT_FILE_BYTES {
+        if bytes.len() as u64 > crate::MAX_VAULT_FILE_BYTES {
             return Err(VaultError::ResourceLimit(format!(
                 "vault payload is {} bytes; maximum is {} bytes",
                 bytes.len(),
@@ -591,7 +591,7 @@ fn unix_time() -> u64 {
 }
 
 pub fn validate_encrypted_vault_bytes(bytes: &[u8]) -> Result<String> {
-    if bytes.len() > crate::MAX_VAULT_FILE_BYTES {
+    if bytes.len() as u64 > crate::MAX_VAULT_FILE_BYTES {
         return Err(VaultError::ResourceLimit(format!(
             "vault payload is {} bytes; maximum is {} bytes",
             bytes.len(),
