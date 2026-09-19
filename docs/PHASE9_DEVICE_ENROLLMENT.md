@@ -2,6 +2,8 @@
 
 ## Status
 
+**Status: COMPLETE — implementation and regression coverage are in place.**
+
 Phase 9 adds cryptographic device identities and explicit device authorization to DragonForge multi-device synchronization.
 
 The zero-knowledge vault model remains unchanged: the sync server still stores only encrypted vault bytes and synchronization metadata. Phase 9 changes **who is allowed to access those encrypted bytes**.
@@ -16,6 +18,8 @@ Each synchronized desktop device receives:
 - a server-side enrollment state: `pending`, `active`, or `revoked`.
 
 The ML-DSA private seed remains local to the device. The sync server stores only the corresponding ML-DSA verifying key.
+
+Enrollment and display-name refresh requests carry an ML-DSA proof-of-possession signature. The signed enrollment transcript binds the device UUID, normalized display name, and verifying key, so the server verifies that the enrolling client actually controls the private key corresponding to the identity it registers.
 
 The current desktop implementation stores the private seed in the per-vault sync sidecar. This is an improvement over bearer-token-only authorization, but OS-backed secure key storage is still a future hardening item.
 
@@ -59,6 +63,8 @@ The server verifies the signature against the stored verifying key of the active
 Revocation uses the same signed-decision model.
 
 A revoked device is denied synchronized vault access even if it still possesses the account sync token.
+
+Revocation is terminal in both the in-memory and PostgreSQL stores. Even if an approval request races with revocation, storage refuses a `revoked -> active` transition.
 
 A device cannot revoke itself through the Phase 9 API.
 
@@ -143,7 +149,9 @@ It also prevents:
 - revoked devices from syncing;
 - reusing a device UUID with a different verifying key;
 - auto-rebootstrap after all previously enrolled devices are revoked;
-- unsigned approval or revocation decisions.
+- unsigned approval or revocation decisions;
+- registration of a device identity without proving possession of its ML-DSA private key;
+- reactivation of a revoked device identity.
 
 ## Limitations / later phases
 
@@ -166,3 +174,24 @@ Those belong to later hardening/recovery/mobile phases.
 Phase 9's **Remove sync** action removes the local sync sidecar, including the local ML-DSA signing seed. It does not automatically revoke the server-side device record.
 
 Before removing sync from an active device, ensure another active device is available to approve a replacement. Removing the only active device's local identity can leave the account without a usable approval key until a future recovery flow is implemented.
+
+
+## Completion verification coverage
+
+Phase 9 automated coverage includes:
+
+- initial-device bootstrap to active;
+- additional-device pending enrollment;
+- ML-DSA enrollment proof-of-possession verification;
+- invalid enrollment-proof rejection;
+- pending-device sync denial;
+- active-device signed vault access;
+- bearer-only vault access denial after enrollment begins;
+- stale signed-request rejection outside the five-minute freshness window;
+- active-device signed approval;
+- active-device signed revocation;
+- revoked-device sync denial;
+- terminal revocation / no reactivation;
+- prevention of first-device re-bootstrap after all historical devices are revoked;
+- Phase 8 sidecar v1 to v2 migration while preserving server URL, bearer token, last revision, and ciphertext hash;
+- existing Phase 8 multi-device synchronization and conflict regressions.
