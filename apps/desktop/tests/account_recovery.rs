@@ -92,13 +92,21 @@ fn lost_device_recovery_restores_vault_and_rotates_trust() {
     assert_eq!(result.generation, 2);
     assert!(result.status.unlocked);
     assert!(result.sync_status.configured);
-    assert_eq!(result.sync_status.device_name.as_deref(), Some("Replacement PC"));
-    assert_eq!(replacement.list_items(Some("Recovery Login")).unwrap().len(), 1);
+    assert_eq!(
+        result.sync_status.device_name.as_deref(),
+        Some("Replacement PC")
+    );
+    assert_eq!(
+        replacement
+            .list_items(Some("Recovery Login"))
+            .unwrap()
+            .len(),
+        1
+    );
 
     let old_device_error = original.sync_now().unwrap_err().to_string();
     assert!(
-        old_device_error.contains("authentication")
-            || old_device_error.contains("not active"),
+        old_device_error.contains("authentication") || old_device_error.contains("not active"),
         "unexpected old-device failure: {old_device_error}"
     );
 
