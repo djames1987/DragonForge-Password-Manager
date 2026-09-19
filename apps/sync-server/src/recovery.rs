@@ -53,6 +53,7 @@ struct ConfigureRecoveryResponse {
 struct RecoveryAuthRequest {
     account_id: Uuid,
     vault_id: Uuid,
+    generation: u64,
     timestamp: u64,
     nonce_hex: String,
     signature_hex: String,
@@ -291,6 +292,9 @@ async fn authenticate_recovery(
     if record.vault_id != request.vault_id {
         return Err(ApiError::Forbidden);
     }
+    if record.generation != request.generation {
+        return Err(ApiError::RecoveryConflict);
+    }
     let verifying_key =
         MlDsa65VerifyingKey::from_bytes(&record.verifying_key).map_err(|_| ApiError::Forbidden)?;
     let signature = parse_hex(&request.signature_hex, "recovery signature")?;
@@ -298,7 +302,7 @@ async fn authenticate_recovery(
         action,
         request.account_id,
         request.vault_id,
-        record.generation,
+        request.generation,
         request.timestamp,
         &request.nonce_hex,
     );
