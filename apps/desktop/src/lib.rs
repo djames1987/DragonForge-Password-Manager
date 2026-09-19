@@ -10,11 +10,11 @@ pub use bridge::{
     BROWSER_PROTOCOL_VERSION, BrowserAction, BrowserBridge, BrowserRequest, BrowserResponse,
     NATIVE_HOST_NAME, forward_native_request,
 };
+pub use recovery::RecoverySetup;
 pub use service::{
     AppStatus, BrowserCredential, BrowserLoginSummary, CreateVaultResponse, DesktopError,
     DesktopService, ItemDraft, ItemDto, ItemSummaryDto, RecoverVaultResponse,
 };
-pub use recovery::RecoverySetup;
 pub use sync::{DeviceSummary, SyncError, SyncOutcome, SyncStatus};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
