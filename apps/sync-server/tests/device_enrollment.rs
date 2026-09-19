@@ -83,10 +83,18 @@ async fn enroll(
     name: &str,
     key: &MlDsa65KeyPair,
 ) -> EnrollResponse {
+    let verifying_key_hex = hex::encode(key.verifying_key().as_bytes());
+    let proof_message = format!(
+        "dragonforge/device-enrollment/v1\n{}\n{}\n{}",
+        device_id,
+        name,
+        verifying_key_hex
+    );
     let body = serde_json::json!({
         "deviceId": device_id,
         "name": name,
-        "verifyingKeyHex": hex::encode(key.verifying_key().as_bytes()),
+        "verifyingKeyHex": verifying_key_hex,
+        "proofSignatureHex": hex::encode(key.sign(proof_message.as_bytes())),
     });
     let response = app
         .clone()
@@ -328,4 +336,42 @@ async fn revoked_device_history_does_not_allow_first_device_rebootstrap() {
 
     assert!(!first_device);
     assert_eq!(replacement.status, DeviceStatus::Pending);
+}
+
+
+#[tokio::test]
+async fn enrollment_rejects_invalid_device_proof_of_possession() {
+    let app = app();
+    let token = create_account(&app).await;
+    let device_id = Uuid::new_v4();
+    let claimed_key = MlDsa65KeyPair::generate();
+    let wrong_key = MlDsa65KeyPair::generate();
+    let verifying_key_hex = hex::encode(claimed_key.verifying_key().as_bytes());
+    let proof_message = format!(
+        "dragonforge/device-enrollment/v1\n{}\n{}\n{}",
+        device_id,
+        "Untrusted Device",
+        verifying_key_hex
+    );
+    let body = serde_json::json!({
+        "deviceId": device_id,
+        "name": "Untrusted Device",
+        "verifyingKeyHex": verifying_key_hex,
+        "proofSignatureHex": hex::encode(wrong_key.sign(proof_message.as_bytes())),
+    });
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/devices/enroll")
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(serde_json::to_vec(&body).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
 }
