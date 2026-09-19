@@ -18,6 +18,10 @@ pub enum StoreError {
     DeviceExists,
     #[error("invalid device status transition")]
     InvalidDeviceTransition,
+    #[error("recovery generation conflict")]
+    RecoveryGenerationConflict,
+    #[error("invalid recovery state")]
+    InvalidRecoveryState,
     #[error("store failure")]
     Internal,
 }
@@ -34,6 +38,8 @@ pub enum ApiError {
     NotFound,
     #[error("revision conflict")]
     Conflict { current_revision: u64 },
+    #[error("recovery state changed")]
+    RecoveryConflict,
     #[error("service unavailable")]
     Unavailable,
 }
@@ -75,6 +81,12 @@ impl IntoResponse for ApiError {
                 "base revision does not match the current server revision".to_owned(),
                 Some(current_revision),
             ),
+            Self::RecoveryConflict => (
+                StatusCode::CONFLICT,
+                "recoveryConflict",
+                "recovery state changed; restart recovery with the current recovery kit".to_owned(),
+                None,
+            ),
             Self::Unavailable => (
                 StatusCode::SERVICE_UNAVAILABLE,
                 "unavailable",
@@ -105,6 +117,10 @@ impl From<StoreError> for ApiError {
             ),
             StoreError::InvalidDeviceTransition => {
                 Self::BadRequest("revoked device identities cannot be reactivated".to_owned())
+            }
+            StoreError::RecoveryGenerationConflict => Self::RecoveryConflict,
+            StoreError::InvalidRecoveryState => {
+                Self::BadRequest("recovery configuration is inconsistent".to_owned())
             }
             StoreError::AccountExists | StoreError::Internal => Self::Unavailable,
         }
