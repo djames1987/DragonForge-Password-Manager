@@ -97,17 +97,20 @@ impl SyncStore for InMemoryStore {
         let mut state = self.inner.lock().map_err(|_| StoreError::Internal)?;
         let key = (account_id, device_id);
         if let Some(existing) = state.devices.get(&key) {
-            if existing.verifying_key == verifying_key && existing.name == name {
-                let first = existing.status == DeviceStatus::Active
-                    && state
-                        .devices
-                        .values()
-                        .filter(|device| device.account_id == account_id)
-                        .count()
-                        == 1;
-                return Ok((existing.clone(), first));
+            if existing.verifying_key != verifying_key {
+                return Err(StoreError::DeviceExists);
             }
-            return Err(StoreError::DeviceExists);
+            let first = existing.status == DeviceStatus::Active
+                && state
+                    .devices
+                    .values()
+                    .filter(|device| device.account_id == account_id)
+                    .count()
+                    == 1;
+            let mut updated = existing.clone();
+            updated.name = name;
+            state.devices.insert(key, updated.clone());
+            return Ok((updated, first));
         }
 
         let first_device = !state
@@ -331,21 +334,29 @@ mod postgres {
             .map_err(|_| StoreError::Internal)?
             {
                 let existing = row_to_device(account_id, device_id, row)?;
-                if existing.verifying_key == verifying_key && existing.name == name {
-                    let count: i64 = sqlx::query_scalar(
-                        "SELECT COUNT(*) FROM sync_devices WHERE account_id = $1",
-                    )
-                    .bind(account_id)
-                    .fetch_one(&mut *transaction)
-                    .await
-                    .map_err(|_| StoreError::Internal)?;
-                    transaction.commit().await.map_err(|_| StoreError::Internal)?;
-                    return Ok((
-                        existing.clone(),
-                        existing.status == DeviceStatus::Active && count == 1,
-                    ));
+                if existing.verifying_key != verifying_key {
+                    return Err(StoreError::DeviceExists);
                 }
-                return Err(StoreError::DeviceExists);
+                sqlx::query(
+                    "UPDATE sync_devices SET name = $3 WHERE account_id = $1 AND device_id = $2",
+                )
+                .bind(account_id)
+                .bind(device_id)
+                .bind(&name)
+                .execute(&mut *transaction)
+                .await
+                .map_err(|_| StoreError::Internal)?;
+                let count: i64 =
+                    sqlx::query_scalar("SELECT COUNT(*) FROM sync_devices WHERE account_id = $1")
+                        .bind(account_id)
+                        .fetch_one(&mut *transaction)
+                        .await
+                        .map_err(|_| StoreError::Internal)?;
+                transaction.commit().await.map_err(|_| StoreError::Internal)?;
+                let mut updated = existing;
+                updated.name = name;
+                let first = updated.status == DeviceStatus::Active && count == 1;
+                return Ok((updated, first));
             }
 
             let device_count: i64 =
