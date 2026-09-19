@@ -691,7 +691,10 @@
       $("sync-server-url").value = "";
       $("sync-token").value = "";
       $("sync-conflict-actions").classList.add("hidden");
+      $("device-name").value = "";
+      $("device-list").replaceChildren();
       await refreshSyncStatus();
+      await refreshDeviceEnrollment();
       toast("Sync settings removed from this device.");
     } catch (error) {
       toast(error.message, "error");
