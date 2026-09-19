@@ -924,7 +924,7 @@ fn validate_token(token: &str) -> Result<(), SyncError> {
 }
 
 fn validate_device_name(name: &str) -> Result<&str, SyncError> {
-    if name.is_empty() || name.len() > 120 {
+    if name.is_empty() || name.chars().count() > 120 {
         Err(SyncError::InvalidConfig(
             "device name must contain 1 to 120 characters".to_owned(),
         ))
@@ -1113,5 +1113,51 @@ mod tests {
             request_signature_message("PUT", "/v1/vaults/test", timestamp, b"one", Some(2));
         assert_ne!(one, two);
         assert_ne!(one, revision);
+    }
+
+    #[test]
+    fn phase8_sidecar_migrates_without_losing_sync_history() {
+        let directory = tempfile::tempdir().unwrap();
+        let vault_path = directory.path().join("legacy.dfvault");
+        let sidecar = config_path(&vault_path);
+        let last_hash = "ab".repeat(32);
+        let legacy = serde_json::json!({
+            "version": 1,
+            "serverUrl": "http://127.0.0.1:8787",
+            "syncToken": "a".repeat(64),
+            "lastRevision": 7,
+            "lastContentSha256": last_hash,
+        });
+        fs::write(&sidecar, serde_json::to_vec(&legacy).unwrap()).unwrap();
+
+        let status = configure(
+            &vault_path,
+            "http://127.0.0.1:8787",
+            &"a".repeat(64),
+        )
+        .unwrap();
+
+        assert!(status.configured);
+        assert_eq!(status.last_revision, 7);
+        assert_eq!(status.last_content_sha256.as_deref(), Some(last_hash.as_str()));
+        assert!(status.device_id.is_some());
+        assert!(status.device_name.is_some());
+
+        let migrated: serde_json::Value =
+            serde_json::from_slice(&fs::read(sidecar).unwrap()).unwrap();
+        assert_eq!(migrated["version"], 2);
+        assert_eq!(migrated["lastRevision"], 7);
+        assert_eq!(migrated["lastContentSha256"], last_hash);
+        assert_eq!(
+            migrated["syncToken"],
+            serde_json::Value::String("a".repeat(64))
+        );
+        assert!(migrated["deviceId"].as_str().is_some());
+        assert_eq!(
+            migrated["deviceSigningSeedHex"]
+                .as_str()
+                .map(str::len),
+            Some(64)
+        );
     }
 }
