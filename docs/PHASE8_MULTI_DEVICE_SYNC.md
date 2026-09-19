@@ -56,10 +56,11 @@ The client:
 
 1. downloads the opaque encrypted file;
 2. verifies the server SHA-256 header;
-3. performs structural vault validation;
-4. locks the currently unlocked local vault;
-5. atomically replaces the local encrypted file;
-6. records the new synchronized revision/hash.
+3. performs full structural vault validation and verifies the embedded vault UUID;
+4. authenticates every encrypted item with the currently unlocked vault's item-wrap key/AEAD context;
+5. locks the currently unlocked local vault;
+6. atomically replaces the local encrypted file;
+7. records the new synchronized revision/hash.
 
 The user must unlock the vault again after a remote pull. This prevents stale decrypted in-memory state from surviving replacement of the encrypted file.
 
