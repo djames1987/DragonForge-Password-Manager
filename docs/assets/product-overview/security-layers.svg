@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="760" viewBox="0 0 1400 760" role="img" aria-labelledby="title desc">
+<title id="title">DragonForge security layers</title>
+<desc id="desc">Layered defense from password derivation and encrypted vault records through device trust, recovery, OS secret protection, and verification.</desc>
+<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="0"><stop stop-color="#ff7a18"/><stop offset="1" stop-color="#ffb347"/></linearGradient></defs>
+<rect width="1400" height="760" rx="28" fill="#090e19"/>
+<text x="70" y="72" font-family="Segoe UI, Arial" font-size="38" font-weight="700" fill="#f8fafc">Defense in depth</text>
+<text x="70" y="108" font-family="Segoe UI, Arial" font-size="20" fill="#94a3b8">DragonForge separates compromise domains instead of relying on one key or one boundary.</text>
+<g font-family="Segoe UI, Arial">
+  <rect x="110" y="155" width="1180" height="82" rx="18" fill="#131c2f" stroke="#334155"/>
+  <text x="145" y="188" font-size="20" font-weight="700" fill="#f8fafc">Layer 1 — Master password hardening</text>
+  <text x="145" y="218" font-size="17" fill="#cbd5e1">Argon2id with bounded parameters and fresh salt; Account Secret participates in unlock derivation.</text>
+
+  <rect x="150" y="255" width="1100" height="82" rx="18" fill="#121b2b" stroke="#334155"/>
+  <text x="185" y="288" font-size="20" font-weight="700" fill="#f8fafc">Layer 2 — Vault key hierarchy</text>
+  <text x="185" y="318" font-size="17" fill="#cbd5e1">Random 256-bit VMK → HKDF item-wrap key → fresh per-item keys → AES-256-GCM with authenticated context.</text>
+
+  <rect x="190" y="355" width="1020" height="82" rx="18" fill="#101927" stroke="#334155"/>
+  <text x="225" y="388" font-size="20" font-weight="700" fill="#f8fafc">Layer 3 — Signed device trust</text>
+  <text x="225" y="418" font-size="17" fill="#cbd5e1">ML-DSA-65 identities, proof-of-possession, pending approval, terminal revocation, signed sync requests.</text>
+
+  <rect x="230" y="455" width="940" height="82" rx="18" fill="#0f1724" stroke="#334155"/>
+  <text x="265" y="488" font-size="20" font-weight="700" fill="#f8fafc">Layer 4 — Zero-knowledge recovery</text>
+  <text x="265" y="518" font-size="17" fill="#cbd5e1">Offline recovery identity + encrypted Account Secret envelope + local master-password validation + rotation.</text>
+
+  <rect x="270" y="555" width="860" height="82" rx="18" fill="#0e1622" stroke="#334155"/>
+  <text x="305" y="588" font-size="20" font-weight="700" fill="#f8fafc">Layer 5 — OS-backed local sync secrets</text>
+  <text x="305" y="618" font-size="17" fill="#cbd5e1">Windows Credential Manager protects the bearer token and device signing seed from copied sidecar files.</text>
+
+  <rect x="440" y="660" width="520" height="54" rx="27" fill="url(#g)"/>
+  <text x="700" y="694" text-anchor="middle" font-size="19" font-weight="700" fill="#111827">Verification: unit • integration • regression • release • CI</text>
+</g>
+</svg>
