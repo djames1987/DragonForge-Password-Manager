@@ -200,3 +200,67 @@ fn explicit_keep_local_conflict_resolution_uploads_new_revision() {
         .unwrap();
     assert_eq!(device_a.list_items(Some("Local Choice")).unwrap().len(), 1);
 }
+
+
+#[test]
+fn tampered_remote_snapshot_is_rejected_before_local_replacement() {
+    let server = start_sync_server();
+    let temp = tempdir().unwrap();
+    let vault_path = temp.path().join("tamper-test.dfvault");
+
+    let device = DesktopService::default();
+    let created = device.create_vault(&vault_path, MASTER).unwrap();
+    device
+        .save_item(&login("Protected Login", "protected@example.com"))
+        .unwrap();
+    device.configure_sync(&server, TOKEN).unwrap();
+
+    let initial = device.sync_now().unwrap();
+    assert_eq!(initial.action, "uploaded");
+    assert_eq!(initial.revision, 1);
+
+    let original_bytes = fs::read(&vault_path).unwrap();
+    let mut tampered_json: serde_json::Value = serde_json::from_slice(&original_bytes).unwrap();
+    let ciphertext = tampered_json["items"][0]["payload"]["ciphertext"]
+        .as_array_mut()
+        .expect("encrypted item ciphertext array");
+    let first_byte = ciphertext[0]
+        .as_u64()
+        .expect("ciphertext byte");
+    ciphertext[0] = serde_json::Value::from((first_byte ^ 1) as u8);
+    let tampered_bytes = serde_json::to_vec_pretty(&tampered_json).unwrap();
+
+    let vault_id = device.status().unwrap().vault_id.unwrap();
+    let response = reqwest::blocking::Client::new()
+        .put(format!("{server}/v1/vaults/{vault_id}"))
+        .header("authorization", format!("Bearer {TOKEN}"))
+        .header("x-dragonforge-base-revision", "1")
+        .header("content-type", "application/octet-stream")
+        .body(tampered_bytes)
+        .send()
+        .unwrap();
+    assert!(response.status().is_success());
+
+    let error = device.sync_now().unwrap_err();
+    assert!(
+        error.to_string().contains("integrity")
+            || error.to_string().contains("decrypt")
+            || error.to_string().contains("cryptographic"),
+        "unexpected tamper rejection: {error}"
+    );
+
+    assert!(device.status().unwrap().unlocked);
+    assert_eq!(fs::read(&vault_path).unwrap(), original_bytes);
+    assert_eq!(
+        device
+            .list_items(Some("Protected Login"))
+            .unwrap()
+            .len(),
+        1
+    );
+
+    device.lock_vault().unwrap();
+    device
+        .unlock_vault(&vault_path, MASTER, &created.account_secret_hex)
+        .unwrap();
+}
