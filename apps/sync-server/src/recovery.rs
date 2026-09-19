@@ -28,6 +28,7 @@ const HEADER_REVISION: &str = "x-dragonforge-revision";
 const HEADER_CONTENT_SHA256: &str = "x-dragonforge-content-sha256";
 
 static RECOVERY_ATTEMPTS: OnceLock<Mutex<HashMap<Uuid, VecDeque<u64>>>> = OnceLock::new();
+static RECOVERY_NONCES: OnceLock<Mutex<HashMap<(Uuid, String), u64>>> = OnceLock::new();
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -255,6 +256,7 @@ async fn complete_recovery(
     old_recovery_key
         .verify(&message, &signature)
         .map_err(|_| ApiError::Forbidden)?;
+    consume_recovery_nonce(request.account_id, &request.nonce_hex)?;
 
     let sync_token = new_sync_token();
     let (device, recovery) = state
@@ -308,6 +310,7 @@ async fn authenticate_recovery(
     verifying_key
         .verify(&message, &signature)
         .map_err(|_| ApiError::Forbidden)?;
+    consume_recovery_nonce(request.account_id, &request.nonce_hex)?;
     Ok(record)
 }
 
@@ -394,6 +397,19 @@ fn check_rate_limit(account_id: Uuid) -> Result<(), ApiError> {
         ));
     }
     entries.push_back(now);
+    Ok(())
+}
+
+fn consume_recovery_nonce(account_id: Uuid, nonce_hex: &str) -> Result<(), ApiError> {
+    let now = now_seconds()?;
+    let nonces = RECOVERY_NONCES.get_or_init(|| Mutex::new(HashMap::new()));
+    let mut nonces = nonces.lock().map_err(|_| ApiError::Unavailable)?;
+    nonces.retain(|_, seen_at| now.saturating_sub(*seen_at) <= MAX_CLOCK_SKEW_SECONDS);
+    let key = (account_id, nonce_hex.to_ascii_lowercase());
+    if nonces.contains_key(&key) {
+        return Err(ApiError::Forbidden);
+    }
+    nonces.insert(key, now);
     Ok(())
 }
 
