@@ -120,8 +120,9 @@ async fn enroll_device(
         .map_err(|_| ApiError::BadRequest("device verifying key must be hexadecimal".to_owned()))?;
     let verifying = MlDsa65VerifyingKey::from_bytes(&verifying_key)
         .map_err(|_| ApiError::BadRequest("device verifying key is invalid".to_owned()))?;
-    let proof_signature = hex::decode(&request.proof_signature_hex)
-        .map_err(|_| ApiError::BadRequest("device enrollment proof must be hexadecimal".to_owned()))?;
+    let proof_signature = hex::decode(&request.proof_signature_hex).map_err(|_| {
+        ApiError::BadRequest("device enrollment proof must be hexadecimal".to_owned())
+    })?;
     let proof_message =
         device_enrollment_message(request.device_id, name, &request.verifying_key_hex);
     verifying
@@ -166,15 +167,8 @@ async fn list_devices(
     State(state): State<AppState>,
     headers: HeaderMap,
 ) -> Result<Json<Vec<DeviceSummary>>, ApiError> {
-    let account_id = authenticate_signed_request(
-        &state,
-        &headers,
-        "GET",
-        "/v1/devices",
-        &[],
-        None,
-    )
-    .await?;
+    let account_id =
+        authenticate_signed_request(&state, &headers, "GET", "/v1/devices", &[], None).await?;
     let devices = state.store.list_devices(account_id).await?;
     Ok(Json(devices.iter().map(DeviceSummary::from).collect()))
 }
@@ -186,10 +180,7 @@ async fn approve_device(
     Json(request): Json<DeviceDecisionRequest>,
 ) -> Result<Json<DeviceSummary>, ApiError> {
     let account_id = authenticate_account(&state, &headers).await?;
-    let target = state
-        .store
-        .get_device(account_id, target_device_id)
-        .await?;
+    let target = state.store.get_device(account_id, target_device_id).await?;
     if target.status != DeviceStatus::Pending {
         return Err(ApiError::BadRequest(
             "only pending devices can be approved".to_owned(),
@@ -225,10 +216,7 @@ async fn revoke_device(
             "a device cannot revoke itself".to_owned(),
         ));
     }
-    let target = state
-        .store
-        .get_device(account_id, target_device_id)
-        .await?;
+    let target = state.store.get_device(account_id, target_device_id).await?;
     if target.status == DeviceStatus::Revoked {
         return Ok(Json(DeviceSummary::from(&target)));
     }
@@ -256,8 +244,7 @@ async fn get_vault(
     headers: HeaderMap,
 ) -> Result<Response, ApiError> {
     let path = format!("/v1/vaults/{vault_id}");
-    let account_id =
-        authenticate_signed_request(&state, &headers, "GET", &path, &[], None).await?;
+    let account_id = authenticate_signed_request(&state, &headers, "GET", &path, &[], None).await?;
     let stored = state.store.get_vault(account_id, vault_id).await?;
 
     let mut response = (StatusCode::OK, stored.ciphertext).into_response();
@@ -284,15 +271,9 @@ async fn put_vault(
 ) -> Result<(StatusCode, Json<SyncMetadata>), ApiError> {
     let base_revision = parse_base_revision(&headers)?;
     let path = format!("/v1/vaults/{vault_id}");
-    let account_id = authenticate_signed_request(
-        &state,
-        &headers,
-        "PUT",
-        &path,
-        &body,
-        Some(base_revision),
-    )
-    .await?;
+    let account_id =
+        authenticate_signed_request(&state, &headers, "PUT", &path, &body, Some(base_revision))
+            .await?;
 
     if body.is_empty() {
         return Err(ApiError::BadRequest(
@@ -370,8 +351,8 @@ async fn authenticate_signed_request(
         return Err(ApiError::Forbidden);
     }
 
-    let verifying_key = MlDsa65VerifyingKey::from_bytes(&device.verifying_key)
-        .map_err(|_| ApiError::Forbidden)?;
+    let verifying_key =
+        MlDsa65VerifyingKey::from_bytes(&device.verifying_key).map_err(|_| ApiError::Forbidden)?;
     let message = request_signature_message(method, path, timestamp, body, base_revision);
     verifying_key
         .verify(&message, &signature)
@@ -404,11 +385,7 @@ async fn verify_device_decision(
         .map_err(|_| ApiError::Forbidden)
 }
 
-pub fn device_enrollment_message(
-    device_id: Uuid,
-    name: &str,
-    verifying_key_hex: &str,
-) -> Vec<u8> {
+pub fn device_enrollment_message(device_id: Uuid, name: &str, verifying_key_hex: &str) -> Vec<u8> {
     format!(
         "dragonforge/device-enrollment/v1\n{}\n{}\n{}",
         device_id,
