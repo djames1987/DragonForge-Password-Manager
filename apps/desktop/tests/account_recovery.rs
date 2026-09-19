@@ -105,7 +105,8 @@ fn lost_device_recovery_restores_vault_and_rotates_trust() {
     let replay = DesktopService::default();
     let replay_error = replay
         .recover_synced_vault(&replay_path, &server, &old_kit, MASTER, Some("Replay PC"))
-        .unwrap_err()
+        .err()
+        .expect("reusing an old recovery kit must fail")
         .to_string();
     assert!(
         replay_error.contains("rotated")
