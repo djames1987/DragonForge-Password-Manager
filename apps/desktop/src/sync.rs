@@ -209,17 +209,18 @@ pub(crate) fn enroll_device(
 ) -> Result<DeviceSummary, SyncError> {
     let mut config = load_config(vault_path)?.ok_or(SyncError::NotConfigured)?;
     ensure_device_identity(&mut config, preferred_name)?;
+    save_config(vault_path, &config)?;
     let response = post_enrollment(&config)?;
     if response.first_device && !matches!(response.device.status, ServerDeviceStatus::Active) {
         return Err(SyncError::InvalidResponse);
     }
-    save_config(vault_path, &config)?;
     Ok(device_summary(response.device))
 }
 
 pub(crate) fn own_device_status(vault_path: &Path) -> Result<DeviceSummary, SyncError> {
     let mut config = load_config(vault_path)?.ok_or(SyncError::NotConfigured)?;
     ensure_device_identity(&mut config, None)?;
+    save_config(vault_path, &config)?;
     let device_id = device_id(&config)?;
     let response = client()?
         .get(format!("{}/v1/devices/{device_id}", config.server_url))
@@ -459,8 +460,8 @@ pub(crate) fn commit_pull(
 
 fn ensure_active_device(vault_path: &Path, config: &mut SyncConfig) -> Result<(), SyncError> {
     ensure_device_identity(config, None)?;
-    let enrollment = post_enrollment(config)?;
     save_config(vault_path, config)?;
+    let enrollment = post_enrollment(config)?;
     match enrollment.device.status {
         ServerDeviceStatus::Active => Ok(()),
         ServerDeviceStatus::Pending | ServerDeviceStatus::Revoked => Err(SyncError::DeviceNotActive),
