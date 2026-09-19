@@ -8,13 +8,36 @@ use async_trait::async_trait;
 use dragonforge_crypto::constant_time_eq;
 use uuid::Uuid;
 
-use crate::{AccountRecord, StoreError, StoredVault};
+use crate::{AccountRecord, DeviceRecord, DeviceStatus, StoreError, StoredVault};
 
 #[async_trait]
 pub trait SyncStore: Send + Sync {
     async fn create_account(&self, account: AccountRecord) -> Result<(), StoreError>;
 
     async fn authenticate(&self, token_hash: [u8; 32]) -> Result<Option<Uuid>, StoreError>;
+
+    async fn enroll_device(
+        &self,
+        account_id: Uuid,
+        device_id: Uuid,
+        name: String,
+        verifying_key: Vec<u8>,
+    ) -> Result<(DeviceRecord, bool), StoreError>;
+
+    async fn get_device(
+        &self,
+        account_id: Uuid,
+        device_id: Uuid,
+    ) -> Result<DeviceRecord, StoreError>;
+
+    async fn list_devices(&self, account_id: Uuid) -> Result<Vec<DeviceRecord>, StoreError>;
+
+    async fn set_device_status(
+        &self,
+        account_id: Uuid,
+        device_id: Uuid,
+        status: DeviceStatus,
+    ) -> Result<DeviceRecord, StoreError>;
 
     async fn get_vault(&self, account_id: Uuid, vault_id: Uuid) -> Result<StoredVault, StoreError>;
 
@@ -37,6 +60,7 @@ pub struct InMemoryStore {
 struct MemoryState {
     accounts: Vec<AccountRecord>,
     vaults: HashMap<(Uuid, Uuid), StoredVault>,
+    devices: HashMap<(Uuid, Uuid), DeviceRecord>,
 }
 
 #[async_trait]
@@ -61,6 +85,106 @@ impl SyncStore for InMemoryStore {
             .iter()
             .find(|account| constant_time_eq(&account.token_hash, &token_hash))
             .map(|account| account.account_id))
+    }
+
+    async fn enroll_device(
+        &self,
+        account_id: Uuid,
+        device_id: Uuid,
+        name: String,
+        verifying_key: Vec<u8>,
+    ) -> Result<(DeviceRecord, bool), StoreError> {
+        let mut state = self.inner.lock().map_err(|_| StoreError::Internal)?;
+        let key = (account_id, device_id);
+        if let Some(existing) = state.devices.get(&key) {
+            if existing.verifying_key == verifying_key && existing.name == name {
+                let first = existing.status == DeviceStatus::Active
+                    && state
+                        .devices
+                        .values()
+                        .filter(|device| device.account_id == account_id)
+                        .count()
+                        == 1;
+                return Ok((existing.clone(), first));
+            }
+            return Err(StoreError::DeviceExists);
+        }
+
+        let first_device = !state.devices.values().any(|device| {
+            device.account_id == account_id && device.status == DeviceStatus::Active
+        });
+        let now = now_ms();
+        let status = if first_device {
+            DeviceStatus::Active
+        } else {
+            DeviceStatus::Pending
+        };
+        let record = DeviceRecord {
+            account_id,
+            device_id,
+            name,
+            verifying_key,
+            status,
+            created_at_ms: now,
+            approved_at_ms: if first_device { Some(now) } else { None },
+            revoked_at_ms: None,
+        };
+        state.devices.insert(key, record.clone());
+        Ok((record, first_device))
+    }
+
+    async fn get_device(
+        &self,
+        account_id: Uuid,
+        device_id: Uuid,
+    ) -> Result<DeviceRecord, StoreError> {
+        let state = self.inner.lock().map_err(|_| StoreError::Internal)?;
+        state
+            .devices
+            .get(&(account_id, device_id))
+            .cloned()
+            .ok_or(StoreError::NotFound)
+    }
+
+    async fn list_devices(&self, account_id: Uuid) -> Result<Vec<DeviceRecord>, StoreError> {
+        let state = self.inner.lock().map_err(|_| StoreError::Internal)?;
+        let mut devices: Vec<_> = state
+            .devices
+            .values()
+            .filter(|device| device.account_id == account_id)
+            .cloned()
+            .collect();
+        devices.sort_by_key(|device| device.created_at_ms);
+        Ok(devices)
+    }
+
+    async fn set_device_status(
+        &self,
+        account_id: Uuid,
+        device_id: Uuid,
+        status: DeviceStatus,
+    ) -> Result<DeviceRecord, StoreError> {
+        let mut state = self.inner.lock().map_err(|_| StoreError::Internal)?;
+        let record = state
+            .devices
+            .get_mut(&(account_id, device_id))
+            .ok_or(StoreError::NotFound)?;
+        let now = now_ms();
+        record.status = status;
+        match status {
+            DeviceStatus::Active => {
+                record.approved_at_ms = Some(now);
+                record.revoked_at_ms = None;
+            }
+            DeviceStatus::Revoked => {
+                record.revoked_at_ms = Some(now);
+            }
+            DeviceStatus::Pending => {
+                record.approved_at_ms = None;
+                record.revoked_at_ms = None;
+            }
+        }
+        Ok(record.clone())
     }
 
     async fn get_vault(&self, account_id: Uuid, vault_id: Uuid) -> Result<StoredVault, StoreError> {
@@ -128,7 +252,7 @@ mod postgres {
     use sqlx::{PgPool, Row};
     use uuid::Uuid;
 
-    use crate::{AccountRecord, StoreError, StoredVault, SyncStore};
+    use crate::{AccountRecord, DeviceRecord, DeviceStatus, StoreError, StoredVault, SyncStore};
 
     #[derive(Clone)]
     pub struct PostgresStore {
@@ -176,6 +300,144 @@ mod postgres {
 
             row.map(|row| row.try_get("account_id").map_err(|_| StoreError::Internal))
                 .transpose()
+        }
+
+        async fn enroll_device(
+            &self,
+            account_id: Uuid,
+            device_id: Uuid,
+            name: String,
+            verifying_key: Vec<u8>,
+        ) -> Result<(DeviceRecord, bool), StoreError> {
+            let mut transaction = self.pool.begin().await.map_err(|_| StoreError::Internal)?;
+            sqlx::query("SELECT account_id FROM sync_accounts WHERE account_id = $1 FOR UPDATE")
+                .bind(account_id)
+                .fetch_one(&mut *transaction)
+                .await
+                .map_err(|_| StoreError::Internal)?;
+
+            if let Some(row) = sqlx::query(
+                "SELECT name, verifying_key, status, created_at, approved_at, revoked_at
+                 FROM sync_devices WHERE account_id = $1 AND device_id = $2",
+            )
+            .bind(account_id)
+            .bind(device_id)
+            .fetch_optional(&mut *transaction)
+            .await
+            .map_err(|_| StoreError::Internal)?
+            {
+                let existing = row_to_device(account_id, device_id, row)?;
+                if existing.verifying_key == verifying_key && existing.name == name {
+                    let count: i64 = sqlx::query_scalar(
+                        "SELECT COUNT(*) FROM sync_devices WHERE account_id = $1",
+                    )
+                    .bind(account_id)
+                    .fetch_one(&mut *transaction)
+                    .await
+                    .map_err(|_| StoreError::Internal)?;
+                    transaction.commit().await.map_err(|_| StoreError::Internal)?;
+                    return Ok((
+                        existing.clone(),
+                        existing.status == DeviceStatus::Active && count == 1,
+                    ));
+                }
+                return Err(StoreError::DeviceExists);
+            }
+
+            let active_count: i64 = sqlx::query_scalar(
+                "SELECT COUNT(*) FROM sync_devices WHERE account_id = $1 AND status = 'active'",
+            )
+            .bind(account_id)
+            .fetch_one(&mut *transaction)
+            .await
+            .map_err(|_| StoreError::Internal)?;
+            let first_device = active_count == 0;
+            let status = if first_device { "active" } else { "pending" };
+
+            sqlx::query(
+                "INSERT INTO sync_devices
+                 (account_id, device_id, name, verifying_key, status, approved_at)
+                 VALUES ($1, $2, $3, $4, $5, CASE WHEN $5 = 'active' THEN NOW() ELSE NULL END)",
+            )
+            .bind(account_id)
+            .bind(device_id)
+            .bind(&name)
+            .bind(&verifying_key)
+            .bind(status)
+            .execute(&mut *transaction)
+            .await
+            .map_err(|_| StoreError::Internal)?;
+
+            transaction.commit().await.map_err(|_| StoreError::Internal)?;
+            let record = self.get_device(account_id, device_id).await?;
+            Ok((record, first_device))
+        }
+
+        async fn get_device(
+            &self,
+            account_id: Uuid,
+            device_id: Uuid,
+        ) -> Result<DeviceRecord, StoreError> {
+            let row = sqlx::query(
+                "SELECT name, verifying_key, status, created_at, approved_at, revoked_at
+                 FROM sync_devices WHERE account_id = $1 AND device_id = $2",
+            )
+            .bind(account_id)
+            .bind(device_id)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(|_| StoreError::Internal)?
+            .ok_or(StoreError::NotFound)?;
+            row_to_device(account_id, device_id, row)
+        }
+
+        async fn list_devices(&self, account_id: Uuid) -> Result<Vec<DeviceRecord>, StoreError> {
+            let rows = sqlx::query(
+                "SELECT device_id, name, verifying_key, status, created_at, approved_at, revoked_at
+                 FROM sync_devices WHERE account_id = $1 ORDER BY created_at, device_id",
+            )
+            .bind(account_id)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(|_| StoreError::Internal)?;
+
+            rows.into_iter()
+                .map(|row| {
+                    let device_id: Uuid =
+                        row.try_get("device_id").map_err(|_| StoreError::Internal)?;
+                    row_to_device(account_id, device_id, row)
+                })
+                .collect()
+        }
+
+        async fn set_device_status(
+            &self,
+            account_id: Uuid,
+            device_id: Uuid,
+            status: DeviceStatus,
+        ) -> Result<DeviceRecord, StoreError> {
+            let status_text = match status {
+                DeviceStatus::Pending => "pending",
+                DeviceStatus::Active => "active",
+                DeviceStatus::Revoked => "revoked",
+            };
+            let result = sqlx::query(
+                "UPDATE sync_devices SET
+                 status = $3,
+                 approved_at = CASE WHEN $3 = 'active' THEN NOW() ELSE approved_at END,
+                 revoked_at = CASE WHEN $3 = 'revoked' THEN NOW() ELSE NULL END
+                 WHERE account_id = $1 AND device_id = $2",
+            )
+            .bind(account_id)
+            .bind(device_id)
+            .bind(status_text)
+            .execute(&self.pool)
+            .await
+            .map_err(|_| StoreError::Internal)?;
+            if result.rows_affected() == 0 {
+                return Err(StoreError::NotFound);
+            }
+            self.get_device(account_id, device_id).await
         }
 
         async fn get_vault(
@@ -285,6 +547,51 @@ mod postgres {
 
             self.get_vault(account_id, vault_id).await
         }
+    }
+
+    fn row_to_device(
+        account_id: Uuid,
+        device_id: Uuid,
+        row: sqlx::postgres::PgRow,
+    ) -> Result<DeviceRecord, StoreError> {
+        let status_text: String = row.try_get("status").map_err(|_| StoreError::Internal)?;
+        let status = match status_text.as_str() {
+            "pending" => DeviceStatus::Pending,
+            "active" => DeviceStatus::Active,
+            "revoked" => DeviceStatus::Revoked,
+            _ => return Err(StoreError::Internal),
+        };
+        let created_at_ms: i64 = row
+            .try_get::<chrono::DateTime<chrono::Utc>, _>("created_at")
+            .map_err(|_| StoreError::Internal)?
+            .timestamp_millis();
+        let approved_at_ms = row
+            .try_get::<Option<chrono::DateTime<chrono::Utc>>, _>("approved_at")
+            .map_err(|_| StoreError::Internal)?
+            .map(|value| value.timestamp_millis())
+            .map(u64::try_from)
+            .transpose()
+            .map_err(|_| StoreError::Internal)?;
+        let revoked_at_ms = row
+            .try_get::<Option<chrono::DateTime<chrono::Utc>>, _>("revoked_at")
+            .map_err(|_| StoreError::Internal)?
+            .map(|value| value.timestamp_millis())
+            .map(u64::try_from)
+            .transpose()
+            .map_err(|_| StoreError::Internal)?;
+
+        Ok(DeviceRecord {
+            account_id,
+            device_id,
+            name: row.try_get("name").map_err(|_| StoreError::Internal)?,
+            verifying_key: row
+                .try_get("verifying_key")
+                .map_err(|_| StoreError::Internal)?,
+            status,
+            created_at_ms: u64::try_from(created_at_ms).map_err(|_| StoreError::Internal)?,
+            approved_at_ms,
+            revoked_at_ms,
+        })
     }
 
     fn row_to_vault(
