@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="820" viewBox="0 0 1400 820" role="img" aria-labelledby="title desc">
+<title id="title">DragonForge lost-device recovery flow</title>
+<desc id="desc">Offline recovery kit authorizes retrieval of the encrypted vault, local password validation, device replacement, revocation, and credential rotation.</desc>
+<defs>
+  <linearGradient id="accent" x1="0" y1="0" x2="1" y2="0"><stop stop-color="#ff7a18"/><stop offset="1" stop-color="#ffb347"/></linearGradient>
+  <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto"><path d="M0 0L10 5L0 10Z" fill="#64748b"/></marker>
+</defs>
+<rect width="1400" height="820" rx="28" fill="#090e19"/>
+<text x="70" y="74" font-family="Segoe UI, Arial" font-size="38" font-weight="700" fill="#f8fafc">Lost-device recovery: trust is rotated, not bypassed</text>
+<text x="70" y="110" font-family="Segoe UI, Arial" font-size="20" fill="#94a3b8">Wrong master passwords fail locally before the server changes device trust.</text>
+
+<g font-family="Segoe UI, Arial">
+  <rect x="70" y="170" width="250" height="150" rx="20" fill="#111827" stroke="#475569"/>
+  <text x="195" y="212" text-anchor="middle" font-size="21" font-weight="700" fill="#f8fafc">1. Offline recovery kit</text>
+  <text x="195" y="250" text-anchor="middle" font-size="17" fill="#cbd5e1">DFRK1 + recovery seed</text>
+  <text x="195" y="280" text-anchor="middle" font-size="17" fill="#cbd5e1">Stored separately</text>
+
+  <rect x="390" y="170" width="250" height="150" rx="20" fill="#111827" stroke="#475569"/>
+  <text x="515" y="212" text-anchor="middle" font-size="21" font-weight="700" fill="#f8fafc">2. Signed begin</text>
+  <text x="515" y="250" text-anchor="middle" font-size="17" fill="#cbd5e1">Generation + timestamp</text>
+  <text x="515" y="280" text-anchor="middle" font-size="17" fill="#cbd5e1">Fresh 256-bit nonce</text>
+
+  <rect x="710" y="170" width="250" height="150" rx="20" fill="#111827" stroke="#475569"/>
+  <text x="835" y="212" text-anchor="middle" font-size="21" font-weight="700" fill="#f8fafc">3. Encrypted retrieval</text>
+  <text x="835" y="250" text-anchor="middle" font-size="17" fill="#cbd5e1">Encrypted Account Secret</text>
+  <text x="835" y="280" text-anchor="middle" font-size="17" fill="#cbd5e1">Opaque .dfvault snapshot</text>
+
+  <rect x="1030" y="170" width="300" height="150" rx="20" fill="#111827" stroke="#475569"/>
+  <text x="1180" y="212" text-anchor="middle" font-size="21" font-weight="700" fill="#f8fafc">4. Local verification</text>
+  <text x="1180" y="250" text-anchor="middle" font-size="17" fill="#cbd5e1">Decrypt Account Secret locally</text>
+  <text x="1180" y="280" text-anchor="middle" font-size="17" fill="#cbd5e1">Unlock vault with master password</text>
+
+  <path d="M320 245H380" stroke="#64748b" stroke-width="3" marker-end="url(#arrow)"/>
+  <path d="M640 245H700" stroke="#64748b" stroke-width="3" marker-end="url(#arrow)"/>
+  <path d="M960 245H1020" stroke="#64748b" stroke-width="3" marker-end="url(#arrow)"/>
+
+  <rect x="150" y="410" width="1100" height="290" rx="26" fill="#101827" stroke="#334155"/>
+  <text x="700" y="462" text-anchor="middle" font-size="26" font-weight="700" fill="#ff9a45">5. Successful completion performs an atomic trust rotation</text>
+
+  <rect x="205" y="510" width="210" height="110" rx="16" fill="#0f172a" stroke="#475569"/>
+  <text x="310" y="550" text-anchor="middle" font-size="19" font-weight="700" fill="#f8fafc">Revoke old devices</text>
+  <text x="310" y="584" text-anchor="middle" font-size="16" fill="#cbd5e1">Historical trust ends</text>
+
+  <rect x="465" y="510" width="210" height="110" rx="16" fill="#0f172a" stroke="#475569"/>
+  <text x="570" y="550" text-anchor="middle" font-size="19" font-weight="700" fill="#f8fafc">Activate replacement</text>
+  <text x="570" y="584" text-anchor="middle" font-size="16" fill="#cbd5e1">Fresh ML-DSA identity</text>
+
+  <rect x="725" y="510" width="210" height="110" rx="16" fill="#0f172a" stroke="#475569"/>
+  <text x="830" y="550" text-anchor="middle" font-size="19" font-weight="700" fill="#f8fafc">Rotate sync token</text>
+  <text x="830" y="584" text-anchor="middle" font-size="16" fill="#cbd5e1">Old bearer token dies</text>
+
+  <rect x="985" y="510" width="210" height="110" rx="16" fill="#0f172a" stroke="#475569"/>
+  <text x="1090" y="550" text-anchor="middle" font-size="19" font-weight="700" fill="#f8fafc">Rotate recovery kit</text>
+  <text x="1090" y="584" text-anchor="middle" font-size="16" fill="#cbd5e1">Generation increments</text>
+
+  <rect x="430" y="730" width="540" height="56" rx="28" fill="url(#accent)"/>
+  <text x="700" y="766" text-anchor="middle" font-size="20" font-weight="700" fill="#111827">Wrong master password → no trust change → current kit remains usable</text>
+</g>
+</svg>
