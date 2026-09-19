@@ -111,7 +111,7 @@ try {
     Invoke-Logged cargo "test" "--workspace" "--all-features"
 
     Write-Log "=== Phase 11 Windows credential protection ==="
-    if ($IsWindows -or $env:OS -eq "Windows_NT") {
+    if ($env:OS -eq "Windows_NT") {
         Invoke-Logged cargo "test" "-p" "dragonforge-desktop" "--test" "secret_storage" "--" "--nocapture"
     }
     else {
