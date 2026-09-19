@@ -1,9 +1,14 @@
+#[cfg(target_os = "windows")]
 use serde::{Deserialize, Serialize};
+#[cfg(target_os = "windows")]
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
+#[cfg(target_os = "windows")]
 pub(crate) const WINDOWS_STORAGE_LABEL: &str = "windowsCredentialManager";
+#[cfg(not(target_os = "windows"))]
 pub(crate) const LEGACY_STORAGE_LABEL: &str = "legacySidecar";
 
+#[cfg(target_os = "windows")]
 #[derive(Serialize, Deserialize, Zeroize, ZeroizeOnDrop)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct SyncSecretBundle {
