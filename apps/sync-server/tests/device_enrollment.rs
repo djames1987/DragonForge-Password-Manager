@@ -8,7 +8,9 @@ use axum::{
     http::{Request, StatusCode, header},
 };
 use dragonforge_crypto::MlDsa65KeyPair;
-use dragonforge_sync_server::{AppState, InMemoryStore, build_router};
+use dragonforge_sync_server::{
+    AccountRecord, AppState, DeviceStatus, InMemoryStore, SyncStore, build_router, hash_sync_token,
+};
 use http_body_util::BodyExt;
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
@@ -278,4 +280,52 @@ async fn device_enrollment_approval_and_revocation_gate_sync_access() {
         .await,
         StatusCode::FORBIDDEN
     );
+}
+
+
+#[tokio::test]
+async fn revoked_device_history_does_not_allow_first_device_rebootstrap() {
+    let store = InMemoryStore::default();
+    let account_id = Uuid::new_v4();
+    store
+        .create_account(AccountRecord {
+            account_id,
+            token_hash: hash_sync_token(SYNC_TOKEN),
+        })
+        .await
+        .unwrap();
+
+    let first_id = Uuid::new_v4();
+    let first_key = MlDsa65KeyPair::generate();
+    let (first, first_device) = store
+        .enroll_device(
+            account_id,
+            first_id,
+            "Lost PC".to_owned(),
+            first_key.verifying_key().as_bytes().to_vec(),
+        )
+        .await
+        .unwrap();
+    assert!(first_device);
+    assert_eq!(first.status, DeviceStatus::Active);
+
+    store
+        .set_device_status(account_id, first_id, DeviceStatus::Revoked)
+        .await
+        .unwrap();
+
+    let replacement_id = Uuid::new_v4();
+    let replacement_key = MlDsa65KeyPair::generate();
+    let (replacement, first_device) = store
+        .enroll_device(
+            account_id,
+            replacement_id,
+            "Unapproved replacement".to_owned(),
+            replacement_key.verifying_key().as_bytes().to_vec(),
+        )
+        .await
+        .unwrap();
+
+    assert!(!first_device);
+    assert_eq!(replacement.status, DeviceStatus::Pending);
 }
