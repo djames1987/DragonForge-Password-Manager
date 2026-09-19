@@ -511,7 +511,13 @@ fn post_enrollment(config: &SyncConfig) -> Result<EnrollResponse, SyncError> {
         device_id: Uuid,
         name: &'a str,
         verifying_key_hex: String,
+        proof_signature_hex: String,
     }
+
+    let verifying_key_hex = hex::encode(key_pair.verifying_key().as_bytes());
+    let proof_signature_hex = hex::encode(
+        key_pair.sign(&device_enrollment_message(device_id, name, &verifying_key_hex)),
+    );
 
     let response = client()?
         .post(format!("{}/v1/devices/enroll", config.server_url))
@@ -519,7 +525,8 @@ fn post_enrollment(config: &SyncConfig) -> Result<EnrollResponse, SyncError> {
         .json(&Request {
             device_id,
             name,
-            verifying_key_hex: hex::encode(key_pair.verifying_key().as_bytes()),
+            verifying_key_hex,
+            proof_signature_hex,
         })
         .send()
         .map_err(|error| SyncError::Transport(error.to_string()))?;
@@ -728,6 +735,20 @@ fn sign_request(
 ) -> Result<String, SyncError> {
     let message = request_signature_message(method, path, timestamp, body, base_revision);
     Ok(hex::encode(device_key_pair(config)?.sign(&message)))
+}
+
+fn device_enrollment_message(
+    device_id: Uuid,
+    name: &str,
+    verifying_key_hex: &str,
+) -> Vec<u8> {
+    format!(
+        "dragonforge/device-enrollment/v1\n{}\n{}\n{}",
+        device_id,
+        name,
+        verifying_key_hex.to_ascii_lowercase()
+    )
+    .into_bytes()
 }
 
 fn request_signature_message(
