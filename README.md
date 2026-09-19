@@ -2,7 +2,7 @@
 
 DragonForge Password Manager is a security-first, zero-knowledge password manager project designed for long-term cryptographic agility and post-quantum migration.
 
-> **Development status:** Phase 8 — Multi-Device Sync **COMPLETE**
+> **Development status:** Phase 9 — Device Enrollment
 
 ## Completed phases
 
@@ -129,6 +129,24 @@ DragonForge Password Manager is a security-first, zero-knowledge password manage
 - Real two-device integration tests against the actual Phase 7 Axum server.
 - Phase 8 verification runner and Linux/Windows CI coverage.
 
+### Phase 9 — Device Enrollment
+
+- ML-DSA-65 device signing identities generated locally per synchronized desktop.
+- Sync protocol version 2 with signed device authorization.
+- First enrolled device establishes the initial trusted device.
+- Additional devices enter a pending state and require approval by an active device.
+- Active-device signed approval and revocation decisions.
+- Pending and revoked devices are denied encrypted-vault access.
+- Vault GET/PUT signatures bind method, path, timestamp, ciphertext hash, and base revision.
+- Five-minute request timestamp freshness window.
+- Reusing a device UUID with a different public key is rejected.
+- Revoking devices cannot reset the account into a new first-device bootstrap state.
+- Existing Phase 8 sidecars migrate from configuration version 1 to version 2.
+- Pre-enrollment bearer-only sync remains available only while an account has zero device records.
+- PostgreSQL device-enrollment schema and in-memory test implementation.
+- Desktop device enrollment, device listing, approval, rename, and revocation controls.
+- Dedicated Phase 9 lifecycle test and Windows verification runner.
+
 The post-quantum implementation uses the pure-Rust RustCrypto `ml-kem` and `ml-dsa` crates rather than the older unmaintained `pqcrypto-*` bindings.
 
 ## Workspace
@@ -164,6 +182,8 @@ The post-quantum implementation uses the pure-Rust RustCrypto `ml-kem` and `ml-d
 │   ├── PHASE7_TESTING.md
 │   ├── PHASE8_MULTI_DEVICE_SYNC.md
 │   ├── PHASE8_TESTING.md
+│   ├── PHASE9_DEVICE_ENROLLMENT.md
+│   ├── PHASE9_TESTING.md
 │   └── VAULT_FORMAT.md
 ├── scripts/
 │   ├── run-phase4-tests.cmd
@@ -176,6 +196,8 @@ The post-quantum implementation uses the pure-Rust RustCrypto `ml-kem` and `ml-d
 │   ├── run-phase7-tests.ps1
 │   ├── run-phase8-tests.cmd
 │   ├── run-phase8-tests.ps1
+│   ├── run-phase9-tests.cmd
+│   ├── run-phase9-tests.ps1
 │   └── install-browser-native-host.ps1
 └── .github/workflows/ci.yml
 ```
@@ -321,3 +343,25 @@ test-logs\dragonforge-phase8-YYYYMMDD-HHMMSS.log.sha256
 ```
 
 See [docs/PHASE8_TESTING.md](docs/PHASE8_TESTING.md).
+
+
+## Phase 9 device enrollment
+
+After sync is configured, the first device can enroll itself. Additional devices using the same account sync token are created as pending and must be approved from an already-active device.
+
+See [docs/PHASE9_DEVICE_ENROLLMENT.md](docs/PHASE9_DEVICE_ENROLLMENT.md).
+
+## Automated Phase 9 verification
+
+```powershell
+.\scripts\run-phase9-tests.ps1
+```
+
+The runner creates:
+
+```text
+test-logs\dragonforge-phase9-YYYYMMDD-HHMMSS.log
+test-logs\dragonforge-phase9-YYYYMMDD-HHMMSS.log.sha256
+```
+
+See [docs/PHASE9_TESTING.md](docs/PHASE9_TESTING.md).
