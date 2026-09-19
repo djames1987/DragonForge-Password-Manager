@@ -182,7 +182,10 @@ async fn fetch_recovery_vault(
 
     let mut response = (StatusCode::OK, stored.ciphertext).into_response();
     let headers = response.headers_mut();
-    headers.insert(header::CONTENT_TYPE, HeaderValue::from_static("application/octet-stream"));
+    headers.insert(
+        header::CONTENT_TYPE,
+        HeaderValue::from_static("application/octet-stream"),
+    );
     headers.insert(
         HEADER_REVISION,
         HeaderValue::from_str(&stored.revision.to_string()).map_err(|_| ApiError::Unavailable)?,
@@ -351,8 +354,7 @@ fn parse_envelope(value: &str) -> Result<Vec<u8>, ApiError> {
 }
 
 fn parse_hex(value: &str, label: &str) -> Result<Vec<u8>, ApiError> {
-    hex::decode(value)
-        .map_err(|_| ApiError::BadRequest(format!("{label} must be hexadecimal")))
+    hex::decode(value).map_err(|_| ApiError::BadRequest(format!("{label} must be hexadecimal")))
 }
 
 fn validate_device_name(name: &str) -> Result<(), ApiError> {
@@ -479,11 +481,7 @@ fn complete_message(request: &CompleteRecoveryRequest, new_envelope: &[u8]) -> V
     .into_bytes()
 }
 
-fn recovery_rotation_message(
-    account_id: Uuid,
-    vault_id: Uuid,
-    verifying_key_hex: &str,
-) -> Vec<u8> {
+fn recovery_rotation_message(account_id: Uuid, vault_id: Uuid, verifying_key_hex: &str) -> Vec<u8> {
     format!(
         "dragonforge/recovery-rotation/v1\n{}\n{}\n{}",
         account_id,
@@ -493,11 +491,7 @@ fn recovery_rotation_message(
     .into_bytes()
 }
 
-fn device_enrollment_message(
-    device_id: Uuid,
-    name: &str,
-    verifying_key_hex: &str,
-) -> Vec<u8> {
+fn device_enrollment_message(device_id: Uuid, name: &str, verifying_key_hex: &str) -> Vec<u8> {
     format!(
         "dragonforge/device-enrollment/v1\n{}\n{}\n{}",
         device_id,
