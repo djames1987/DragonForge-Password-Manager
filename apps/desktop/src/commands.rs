@@ -142,7 +142,6 @@ pub fn pick_backup_destination() -> Option<String> {
         .map(|path| path.display().to_string())
 }
 
-
 #[tauri::command]
 pub fn sync_status(service: State<'_, DesktopService>) -> Result<SyncStatus, String> {
     service.sync_status().map_err(error_message)
