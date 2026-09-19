@@ -33,7 +33,10 @@
 
   function readableError(error) {
     const text = String(error ?? "Unknown error");
-    if (/sync server rejected authentication|unauthorized/i.test(text)) {
+    if (/recovery kit.*rotated|recovery kit.*used/i.test(text)) {
+      return "This recovery kit has already been used or replaced by a newer kit.";
+    }
+    if (/sync server rejected authentication/i.test(text)) {
       return "The sync server rejected this device's sync token.";
     }
     if (/authentication|decrypt|crypto/i.test(text)) {
@@ -65,6 +68,7 @@
   function showAuthPanel(id) {
     $("create-panel").classList.toggle("hidden", id !== "create-panel");
     $("unlock-panel").classList.toggle("hidden", id !== "unlock-panel");
+    $("disaster-recovery-panel").classList.toggle("hidden", id !== "disaster-recovery-panel");
   }
 
   function showVault() {
@@ -100,7 +104,13 @@
       "settings-password-confirm",
       "settings-secret",
       "sync-token",
-      "recovery-secret"
+      "recovery-secret",
+      "recovery-account-secret",
+      "recovery-kit-output",
+      "disaster-recovery-kit",
+      "disaster-recovery-password",
+      "recovered-account-secret",
+      "rotated-recovery-kit"
     ]) {
       const node = $(id);
       if (!node) continue;
@@ -108,7 +118,7 @@
       else node.textContent = "";
     }
 
-    for (const id of ["item-modal", "settings-modal", "recovery-modal"]) {
+    for (const id of ["item-modal", "settings-modal", "recovery-modal", "disaster-recovery-result-modal"]) {
       $(id)?.classList.add("hidden");
     }
 
@@ -120,6 +130,8 @@
     $("unlock-secret").value = "";
     $("create-password").value = "";
     $("create-password-confirm").value = "";
+    $("disaster-recovery-kit").value = "";
+    $("disaster-recovery-password").value = "";
   }
 
   async function initialize() {
@@ -292,7 +304,16 @@
       $("settings-password-confirm").value = "";
       $("settings-secret").value = "";
       $("sync-token").value = "";
+      $("recovery-account-secret").value = "";
+      $("recovery-kit-output").textContent = "";
+      $("recovery-kit-card").classList.add("hidden");
       $("sync-conflict-actions").classList.add("hidden");
+    }
+    if (id === "disaster-recovery-result-modal") {
+      $("recovered-account-secret").textContent = "";
+      $("rotated-recovery-kit").textContent = "";
+      $("recovery-material-saved").checked = false;
+      $("recovery-result-continue").disabled = true;
     }
   }
 
@@ -624,6 +645,83 @@
     }
   }
 
+  async function configureAccountRecovery() {
+    const button = $("configure-recovery");
+    const accountSecret = $("recovery-account-secret").value.replace(/\s+/g, "");
+    if (!state.syncStatus?.configured) {
+      return toast("Configure synchronization before creating a recovery kit.", "error");
+    }
+    if (!accountSecret) {
+      return toast("Enter the Account Secret used to unlock this vault.", "error");
+    }
+    if (!window.confirm("Create a new recovery kit? Any previous recovery kit for this account will be permanently invalidated.")) {
+      return;
+    }
+
+    setBusy(button, true, "Creating kit…");
+    try {
+      const result = await call("configure_recovery", { accountSecretHex: accountSecret });
+      $("recovery-account-secret").value = "";
+      $("recovery-kit-output").textContent = result.recoveryKit;
+      $("recovery-kit-card").classList.remove("hidden");
+      toast("Recovery kit created. Store it offline before closing this window.");
+    } catch (error) {
+      toast(error.message, "error");
+    } finally {
+      setBusy(button, false);
+    }
+  }
+
+  async function recoverSynchronizedVault() {
+    const destination = $("disaster-recovery-path").value;
+    const serverUrl = $("disaster-recovery-server").value.trim();
+    const recoveryKit = $("disaster-recovery-kit").value.replace(/\s+/g, "");
+    const masterPassword = $("disaster-recovery-password").value;
+    const deviceName = $("disaster-recovery-device-name").value.trim();
+
+    if (!destination || !serverUrl || !recoveryKit || !masterPassword) {
+      return toast("Destination, server URL, recovery kit, and master password are required.", "error");
+    }
+    if (!window.confirm("Recover this account now? Success will revoke all previous devices and rotate the sync token and recovery kit.")) {
+      return;
+    }
+
+    const button = $("disaster-recovery-submit");
+    setBusy(button, true, "Recovering…");
+    try {
+      const result = await call("recover_synced_vault", {
+        destination,
+        serverUrl,
+        recoveryKit,
+        masterPassword,
+        deviceName: deviceName || null,
+      });
+      state.status = result.status;
+      state.syncStatus = result.syncStatus;
+      $("disaster-recovery-kit").value = "";
+      $("disaster-recovery-password").value = "";
+      $("recovered-account-secret").textContent = result.accountSecretHex;
+      $("rotated-recovery-kit").textContent = result.recoveryKit;
+      $("recovery-material-saved").checked = false;
+      $("recovery-result-continue").disabled = true;
+      showAuthPanel(null);
+      $("disaster-recovery-result-modal").classList.remove("hidden");
+    } catch (error) {
+      toast(error.message, "error");
+    } finally {
+      setBusy(button, false);
+    }
+  }
+
+  async function finishDisasterRecovery() {
+    $("recovered-account-secret").textContent = "";
+    $("rotated-recovery-kit").textContent = "";
+    closeModal("disaster-recovery-result-modal");
+    showVault();
+    await refreshItems();
+    toast("Vault recovered. Previous devices and the old recovery kit are no longer authorized.");
+  }
+
   async function runSync() {
     const button = $("settings-sync-now");
     if (button) setBusy(button, true, "Syncing…");
@@ -704,6 +802,7 @@
   function bindEvents() {
     $("show-create").addEventListener("click", () => showAuthPanel("create-panel"));
     $("show-unlock").addEventListener("click", () => showAuthPanel("unlock-panel"));
+    $("show-disaster-recovery").addEventListener("click", () => showAuthPanel("disaster-recovery-panel"));
     document.querySelectorAll(".auth-close").forEach((button) => button.addEventListener("click", () => showAuthPanel(null)));
 
     $("create-browse").addEventListener("click", async () => {
@@ -716,12 +815,23 @@
     });
     $("create-submit").addEventListener("click", createVault);
     $("unlock-submit").addEventListener("click", unlockVault);
+    $("disaster-recovery-browse").addEventListener("click", async () => {
+      const path = await call("pick_new_vault");
+      if (path) $("disaster-recovery-path").value = path;
+    });
+    $("disaster-recovery-submit").addEventListener("click", recoverSynchronizedVault);
 
     $("recovery-saved").addEventListener("change", (event) => {
       $("recovery-continue").disabled = !event.target.checked;
     });
     $("copy-recovery").addEventListener("click", () => copyValue($("recovery-secret").textContent, "Account Secret"));
     $("recovery-continue").addEventListener("click", completeRecovery);
+    $("recovery-material-saved").addEventListener("change", (event) => {
+      $("recovery-result-continue").disabled = !event.target.checked;
+    });
+    $("copy-recovered-account-secret").addEventListener("click", () => copyValue($("recovered-account-secret").textContent, "Recovered Account Secret"));
+    $("copy-rotated-recovery-kit").addEventListener("click", () => copyValue($("rotated-recovery-kit").textContent, "Recovery kit"));
+    $("recovery-result-continue").addEventListener("click", finishDisasterRecovery);
 
     $("new-login").addEventListener("click", () => openItemModal("login"));
     $("new-note").addEventListener("click", () => openItemModal("secure_note"));
@@ -793,6 +903,8 @@
     $("keep-local-sync").addEventListener("click", () => resolveSync("keepLocal"));
     $("keep-remote-sync").addEventListener("click", () => resolveSync("keepRemote"));
     $("remove-sync").addEventListener("click", removeSync);
+    $("configure-recovery").addEventListener("click", configureAccountRecovery);
+    $("copy-recovery-kit").addEventListener("click", () => copyValue($("recovery-kit-output").textContent, "Recovery kit"));
     $("settings-verify").addEventListener("click", verifyVault);
     $("change-password").addEventListener("click", changeMasterPassword);
 
@@ -807,7 +919,7 @@
       }
       if (event.key === "Escape") {
         document.querySelectorAll(".modal-backdrop:not(.hidden)").forEach((modal) => {
-          if (modal.id !== "recovery-modal") closeModal(modal.id);
+          if (modal.id !== "recovery-modal" && modal.id !== "disaster-recovery-result-modal") closeModal(modal.id);
         });
       }
     });
