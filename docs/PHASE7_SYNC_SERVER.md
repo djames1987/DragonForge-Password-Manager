@@ -29,7 +29,7 @@ Future DragonForge sync client (Phase 8)
        | HTTPS required in deployment
        | Authorization: Bearer <256-bit sync token>
        v
-DragonForge Sync API v1
+DragonForge Sync API (introduced as v1; current protocol v2)
        |
        +-- account authentication
        +-- payload size limits
@@ -49,7 +49,7 @@ SyncStore trait
 
 ## API version
 
-Current sync protocol version: **1**.
+Phase 7 introduced sync protocol version **1**. Phase 9 upgrades the current live protocol to **2** to add signed device authorization while preserving a controlled pre-enrollment migration path.
 
 ### Health
 
@@ -62,7 +62,7 @@ Returns:
 ```json
 {
   "ok": true,
-  "protocolVersion": 1
+  "protocolVersion": 2
 }
 ```
 
