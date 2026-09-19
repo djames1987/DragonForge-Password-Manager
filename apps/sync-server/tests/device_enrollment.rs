@@ -375,3 +375,80 @@ async fn enrollment_rejects_invalid_device_proof_of_possession() {
 
     assert_eq!(response.status(), StatusCode::FORBIDDEN);
 }
+
+
+#[tokio::test]
+async fn enrolled_accounts_require_fresh_signed_device_requests() {
+    let app = app();
+    let token = create_account(&app).await;
+    let device_id = Uuid::new_v4();
+    let key = MlDsa65KeyPair::generate();
+    let enrolled = enroll(&app, &token, device_id, "Primary PC", &key).await;
+    assert_eq!(enrolled.device.status, "active");
+
+    let vault_id = Uuid::new_v4();
+    let path = format!("/v1/vaults/{vault_id}");
+
+    let unsigned = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri(&path)
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(unsigned.status(), StatusCode::FORBIDDEN);
+
+    let stale_timestamp = now_seconds().saturating_sub(301);
+    let stale_signature = key.sign(&request_message(
+        "GET",
+        &path,
+        stale_timestamp,
+        &[],
+        None,
+    ));
+    let stale = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri(&path)
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .header("x-dragonforge-device-id", device_id.to_string())
+                .header(
+                    "x-dragonforge-device-timestamp",
+                    stale_timestamp.to_string(),
+                )
+                .header(
+                    "x-dragonforge-device-signature",
+                    hex::encode(stale_signature),
+                )
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(stale.status(), StatusCode::FORBIDDEN);
+
+    let timestamp = now_seconds();
+    let valid_signature = key.sign(&request_message("GET", &path, timestamp, &[], None));
+    let valid = app
+        .oneshot(
+            Request::builder()
+                .uri(&path)
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .header("x-dragonforge-device-id", device_id.to_string())
+                .header("x-dragonforge-device-timestamp", timestamp.to_string())
+                .header(
+                    "x-dragonforge-device-signature",
+                    hex::encode(valid_signature),
+                )
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(valid.status(), StatusCode::NOT_FOUND);
+}
