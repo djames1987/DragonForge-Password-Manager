@@ -114,6 +114,12 @@ jobs:
           rustc --version
           cargo --version
 
+      - name: Check formatting
+        run: cargo fmt --all --check
+
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+
       - name: Check PowerShell browser scripts
         shell: powershell
         run: |
