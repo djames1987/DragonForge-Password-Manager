@@ -684,7 +684,7 @@
   }
 
   async function removeSync() {
-    if (!window.confirm("Remove sync settings from this device? The local encrypted vault will remain unchanged.")) return;
+    if (!window.confirm("Remove local sync settings and this device's local signing key? The encrypted vault will remain unchanged, but this does NOT revoke the remote device record. Make sure another active device can approve a replacement before continuing.")) return;
     try {
       await call("remove_sync");
       state.syncStatus = null;
