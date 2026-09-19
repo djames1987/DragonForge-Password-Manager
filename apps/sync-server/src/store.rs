@@ -173,6 +173,9 @@ impl SyncStore for InMemoryStore {
             .devices
             .get_mut(&(account_id, device_id))
             .ok_or(StoreError::NotFound)?;
+        if record.status == DeviceStatus::Revoked && status != DeviceStatus::Revoked {
+            return Err(StoreError::InvalidDeviceTransition);
+        }
         let now = now_ms();
         record.status = status;
         match status {
@@ -436,12 +439,28 @@ mod postgres {
             device_id: Uuid,
             status: DeviceStatus,
         ) -> Result<DeviceRecord, StoreError> {
+            let mut transaction = self.pool.begin().await.map_err(|_| StoreError::Internal)?;
+            let row = sqlx::query(
+                "SELECT status FROM sync_devices
+                 WHERE account_id = $1 AND device_id = $2 FOR UPDATE",
+            )
+            .bind(account_id)
+            .bind(device_id)
+            .fetch_optional(&mut *transaction)
+            .await
+            .map_err(|_| StoreError::Internal)?
+            .ok_or(StoreError::NotFound)?;
+            let current: String = row.try_get("status").map_err(|_| StoreError::Internal)?;
+            if current == "revoked" && status != DeviceStatus::Revoked {
+                return Err(StoreError::InvalidDeviceTransition);
+            }
+
             let status_text = match status {
                 DeviceStatus::Pending => "pending",
                 DeviceStatus::Active => "active",
                 DeviceStatus::Revoked => "revoked",
             };
-            let result = sqlx::query(
+            sqlx::query(
                 "UPDATE sync_devices SET
                  status = $3,
                  approved_at = CASE WHEN $3 = 'active' THEN NOW() ELSE approved_at END,
@@ -451,12 +470,10 @@ mod postgres {
             .bind(account_id)
             .bind(device_id)
             .bind(status_text)
-            .execute(&self.pool)
+            .execute(&mut *transaction)
             .await
             .map_err(|_| StoreError::Internal)?;
-            if result.rows_affected() == 0 {
-                return Err(StoreError::NotFound);
-            }
+            transaction.commit().await.map_err(|_| StoreError::Internal)?;
             self.get_device(account_id, device_id).await
         }
 
