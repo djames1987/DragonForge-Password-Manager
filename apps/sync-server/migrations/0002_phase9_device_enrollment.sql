@@ -2,7 +2,7 @@ CREATE TABLE IF NOT EXISTS sync_devices (
     account_id UUID NOT NULL REFERENCES sync_accounts(account_id) ON DELETE CASCADE,
     device_id UUID NOT NULL,
     name TEXT NOT NULL CHECK (char_length(name) BETWEEN 1 AND 120),
-    verifying_key BYTEA NOT NULL,
+    verifying_key BYTEA NOT NULL CHECK (octet_length(verifying_key) = 1952),
     status TEXT NOT NULL CHECK (status IN ('pending', 'active', 'revoked')),
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     approved_at TIMESTAMPTZ,
