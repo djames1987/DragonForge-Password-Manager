@@ -188,7 +188,6 @@ pub fn remove_sync(service: State<'_, DesktopService>) -> Result<SyncStatus, Str
     service.remove_sync().map_err(error_message)
 }
 
-
 #[tauri::command]
 pub async fn enroll_device(
     service: State<'_, DesktopService>,
@@ -196,7 +195,9 @@ pub async fn enroll_device(
 ) -> Result<DeviceSummary, String> {
     let service = service.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
-        service.enroll_device(name.as_deref()).map_err(error_message)
+        service
+            .enroll_device(name.as_deref())
+            .map_err(error_message)
     })
     .await
     .map_err(error_message)?
@@ -247,7 +248,6 @@ pub async fn revoke_device(
     .await
     .map_err(error_message)?
 }
-
 
 #[tauri::command]
 pub async fn configure_recovery(
