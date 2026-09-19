@@ -317,7 +317,10 @@ mod postgres {
                 .map_err(|_| StoreError::Internal)?;
 
             if let Some(row) = sqlx::query(
-                "SELECT name, verifying_key, status, created_at, approved_at, revoked_at
+                "SELECT name, verifying_key, status,
+                 (EXTRACT(EPOCH FROM created_at) * 1000)::bigint AS created_at_ms,
+                 CASE WHEN approved_at IS NULL THEN NULL ELSE (EXTRACT(EPOCH FROM approved_at) * 1000)::bigint END AS approved_at_ms,
+                 CASE WHEN revoked_at IS NULL THEN NULL ELSE (EXTRACT(EPOCH FROM revoked_at) * 1000)::bigint END AS revoked_at_ms
                  FROM sync_devices WHERE account_id = $1 AND device_id = $2",
             )
             .bind(account_id)
@@ -379,7 +382,10 @@ mod postgres {
             device_id: Uuid,
         ) -> Result<DeviceRecord, StoreError> {
             let row = sqlx::query(
-                "SELECT name, verifying_key, status, created_at, approved_at, revoked_at
+                "SELECT name, verifying_key, status,
+                 (EXTRACT(EPOCH FROM created_at) * 1000)::bigint AS created_at_ms,
+                 CASE WHEN approved_at IS NULL THEN NULL ELSE (EXTRACT(EPOCH FROM approved_at) * 1000)::bigint END AS approved_at_ms,
+                 CASE WHEN revoked_at IS NULL THEN NULL ELSE (EXTRACT(EPOCH FROM revoked_at) * 1000)::bigint END AS revoked_at_ms
                  FROM sync_devices WHERE account_id = $1 AND device_id = $2",
             )
             .bind(account_id)
@@ -393,7 +399,10 @@ mod postgres {
 
         async fn list_devices(&self, account_id: Uuid) -> Result<Vec<DeviceRecord>, StoreError> {
             let rows = sqlx::query(
-                "SELECT device_id, name, verifying_key, status, created_at, approved_at, revoked_at
+                "SELECT device_id, name, verifying_key, status,
+                 (EXTRACT(EPOCH FROM created_at) * 1000)::bigint AS created_at_ms,
+                 CASE WHEN approved_at IS NULL THEN NULL ELSE (EXTRACT(EPOCH FROM approved_at) * 1000)::bigint END AS approved_at_ms,
+                 CASE WHEN revoked_at IS NULL THEN NULL ELSE (EXTRACT(EPOCH FROM revoked_at) * 1000)::bigint END AS revoked_at_ms
                  FROM sync_devices WHERE account_id = $1 ORDER BY created_at, device_id",
             )
             .bind(account_id)
@@ -562,20 +571,17 @@ mod postgres {
             _ => return Err(StoreError::Internal),
         };
         let created_at_ms: i64 = row
-            .try_get::<chrono::DateTime<chrono::Utc>, _>("created_at")
-            .map_err(|_| StoreError::Internal)?
-            .timestamp_millis();
+            .try_get("created_at_ms")
+            .map_err(|_| StoreError::Internal)?;
         let approved_at_ms = row
-            .try_get::<Option<chrono::DateTime<chrono::Utc>>, _>("approved_at")
+            .try_get::<Option<i64>, _>("approved_at_ms")
             .map_err(|_| StoreError::Internal)?
-            .map(|value| value.timestamp_millis())
             .map(u64::try_from)
             .transpose()
             .map_err(|_| StoreError::Internal)?;
         let revoked_at_ms = row
-            .try_get::<Option<chrono::DateTime<chrono::Utc>>, _>("revoked_at")
+            .try_get::<Option<i64>, _>("revoked_at_ms")
             .map_err(|_| StoreError::Internal)?
-            .map(|value| value.timestamp_millis())
             .map(u64::try_from)
             .transpose()
             .map_err(|_| StoreError::Internal)?;
