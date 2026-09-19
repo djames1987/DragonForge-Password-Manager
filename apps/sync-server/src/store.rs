@@ -110,9 +110,10 @@ impl SyncStore for InMemoryStore {
             return Err(StoreError::DeviceExists);
         }
 
-        let first_device = !state.devices.values().any(|device| {
-            device.account_id == account_id && device.status == DeviceStatus::Active
-        });
+        let first_device = !state
+            .devices
+            .values()
+            .any(|device| device.account_id == account_id);
         let now = now_ms();
         let status = if first_device {
             DeviceStatus::Active
@@ -347,14 +348,13 @@ mod postgres {
                 return Err(StoreError::DeviceExists);
             }
 
-            let active_count: i64 = sqlx::query_scalar(
-                "SELECT COUNT(*) FROM sync_devices WHERE account_id = $1 AND status = 'active'",
-            )
-            .bind(account_id)
-            .fetch_one(&mut *transaction)
-            .await
-            .map_err(|_| StoreError::Internal)?;
-            let first_device = active_count == 0;
+            let device_count: i64 =
+                sqlx::query_scalar("SELECT COUNT(*) FROM sync_devices WHERE account_id = $1")
+                    .bind(account_id)
+                    .fetch_one(&mut *transaction)
+                    .await
+                    .map_err(|_| StoreError::Internal)?;
+            let first_device = device_count == 0;
             let status = if first_device { "active" } else { "pending" };
 
             sqlx::query(
