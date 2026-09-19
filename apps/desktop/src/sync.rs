@@ -179,6 +179,9 @@ pub(crate) fn configure(
 
     let normalized_url = server_url.trim_end_matches('/').to_owned();
     let existing = load_config(vault_path)?;
+    let old_credential_id = existing
+        .as_ref()
+        .and_then(|config| config.credential_id.clone());
     let mut config = match existing {
         Some(mut config)
             if config.server_url == normalized_url && config.sync_token == sync_token =>
@@ -195,14 +198,24 @@ pub(crate) fn configure(
             device_id: None,
             device_name: None,
             device_signing_seed_hex: None,
+            credential_id: new_credential_id(),
         },
     };
     ensure_device_identity(&mut config, None)?;
+    ensure_credential_id(&mut config);
     save_config(vault_path, &config)?;
+    cleanup_replaced_credential(old_credential_id.as_deref(), config.credential_id.as_deref())?;
     Ok(status_from_config(&config))
 }
 
 pub(crate) fn remove(vault_path: &Path) -> Result<SyncStatus, SyncError> {
+    let credential_id = load_config(vault_path)?
+        .and_then(|config| config.credential_id.clone());
+    #[cfg(target_os = "windows")]
+    if let Some(credential_id) = credential_id.as_deref() {
+        secret_store::delete(credential_id).map_err(SyncError::SecretStorage)?;
+    }
+
     let path = config_path(vault_path);
     for candidate in [
         path.clone(),
@@ -496,6 +509,7 @@ fn ensure_device_identity(
     config: &mut SyncConfig,
     preferred_name: Option<&str>,
 ) -> Result<(), SyncError> {
+    ensure_credential_id(config);
     if config.device_id.is_some() && config.device_signing_seed_hex.is_some() {
         if let Some(name) = preferred_name
             .map(str::trim)
@@ -962,6 +976,36 @@ fn sha256_hex(bytes: &[u8]) -> String {
     hex::encode(Sha256::digest(bytes))
 }
 
+fn new_credential_id() -> Option<String> {
+    #[cfg(target_os = "windows")]
+    {
+        Some(Uuid::new_v4().to_string())
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        None
+    }
+}
+
+fn ensure_credential_id(config: &mut SyncConfig) {
+    #[cfg(target_os = "windows")]
+    if config.credential_id.is_none() {
+        config.credential_id = new_credential_id();
+    }
+}
+
+fn cleanup_replaced_credential(
+    previous: Option<&str>,
+    current: Option<&str>,
+) -> Result<(), SyncError> {
+    #[cfg(target_os = "windows")]
+    if let Some(previous) = previous.filter(|previous| Some(*previous) != current) {
+        secret_store::delete(previous).map_err(SyncError::SecretStorage)?;
+    }
+    let _ = (previous, current);
+    Ok(())
+}
+
 fn config_path(vault_path: &Path) -> PathBuf {
     let mut path = vault_path.as_os_str().to_os_string();
     path.push(".sync.json");
@@ -975,33 +1019,118 @@ fn load_config(vault_path: &Path) -> Result<Option<SyncConfig>, SyncError> {
         fs::rename(&backup, &path).map_err(|error| SyncError::Io(error.to_string()))?;
     }
 
-    let mut bytes = match fs::read(path) {
+    let mut bytes = match fs::read(&path) {
         Ok(bytes) => bytes,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
         Err(error) => return Err(SyncError::Io(error.to_string())),
     };
-    let parsed =
-        serde_json::from_slice(&bytes).map_err(|error| SyncError::InvalidConfig(error.to_string()));
+    let parsed = serde_json::from_slice::<SyncConfigDisk>(&bytes)
+        .map_err(|error| SyncError::InvalidConfig(error.to_string()));
     bytes.zeroize();
-    let mut config: SyncConfig = parsed?;
-    if !matches!(config.version, 1 | SYNC_CONFIG_VERSION) {
+    let mut disk = parsed?;
+    if !matches!(disk.version, 1 | 2 | SYNC_CONFIG_VERSION) {
         return Err(SyncError::InvalidConfig(
             "unsupported sync configuration version".to_owned(),
         ));
     }
-    validate_server_url(&config.server_url)?;
-    validate_token(&config.sync_token)?;
-    if config.version == 1 {
-        config.version = SYNC_CONFIG_VERSION;
+    validate_server_url(&disk.server_url)?;
+
+    let original_version = disk.version;
+
+    #[cfg(target_os = "windows")]
+    let (sync_token, device_signing_seed_hex, credential_id) = if original_version
+        == SYNC_CONFIG_VERSION
+    {
+        if disk.sync_token.is_some() || disk.device_signing_seed_hex.is_some() {
+            return Err(SyncError::InvalidConfig(
+                "version 3 Windows sync sidecars must not contain plaintext secrets".to_owned(),
+            ));
+        }
+        let credential_id = disk.credential_id.clone().ok_or_else(|| {
+            SyncError::InvalidConfig("missing Windows credential reference".to_owned())
+        })?;
+        let mut bundle = secret_store::load(&credential_id).map_err(SyncError::SecretStorage)?;
+        let sync_token = std::mem::take(&mut bundle.sync_token);
+        let device_signing_seed_hex = bundle.device_signing_seed_hex.take();
+        (sync_token, device_signing_seed_hex, Some(credential_id))
+    } else {
+        let sync_token = disk.sync_token.take().ok_or_else(|| {
+            SyncError::InvalidConfig("legacy sync sidecar is missing its sync token".to_owned())
+        })?;
+        let device_signing_seed_hex = disk.device_signing_seed_hex.take();
+        (
+            sync_token,
+            device_signing_seed_hex,
+            Some(Uuid::new_v4().to_string()),
+        )
+    };
+
+    #[cfg(not(target_os = "windows"))]
+    let (sync_token, device_signing_seed_hex, credential_id) = (
+        disk.sync_token.take().ok_or_else(|| {
+            SyncError::InvalidConfig("sync sidecar is missing its sync token".to_owned())
+        })?,
+        disk.device_signing_seed_hex.take(),
+        None,
+    );
+
+    validate_token(&sync_token)?;
+    let config = SyncConfig {
+        version: SYNC_CONFIG_VERSION,
+        server_url: disk.server_url,
+        sync_token,
+        last_revision: disk.last_revision,
+        last_content_sha256: disk.last_content_sha256,
+        device_id: disk.device_id,
+        device_name: disk.device_name,
+        device_signing_seed_hex,
+        credential_id,
+    };
+
+    if original_version != SYNC_CONFIG_VERSION {
+        save_config(vault_path, &config)?;
     }
     Ok(Some(config))
 }
 
+fn disk_config(config: &SyncConfig, protect_secrets: bool) -> SyncConfigDisk {
+    SyncConfigDisk {
+        version: SYNC_CONFIG_VERSION,
+        server_url: config.server_url.clone(),
+        sync_token: (!protect_secrets).then(|| config.sync_token.clone()),
+        last_revision: config.last_revision,
+        last_content_sha256: config.last_content_sha256.clone(),
+        device_id: config.device_id.clone(),
+        device_name: config.device_name.clone(),
+        device_signing_seed_hex: if protect_secrets {
+            None
+        } else {
+            config.device_signing_seed_hex.clone()
+        },
+        credential_id: config.credential_id.clone(),
+    }
+}
+
 fn save_config(vault_path: &Path, config: &SyncConfig) -> Result<(), SyncError> {
+    validate_token(&config.sync_token)?;
+
+    #[cfg(target_os = "windows")]
+    {
+        let credential_id = config.credential_id.as_deref().ok_or_else(|| {
+            SyncError::InvalidConfig("missing Windows credential reference".to_owned())
+        })?;
+        let bundle = SyncSecretBundle {
+            sync_token: config.sync_token.clone(),
+            device_signing_seed_hex: config.device_signing_seed_hex.clone(),
+        };
+        secret_store::store(credential_id, &bundle).map_err(SyncError::SecretStorage)?;
+    }
+
+    let disk = disk_config(config, cfg!(target_os = "windows"));
     let path = config_path(vault_path);
     let temp = path.with_extension("json.tmp");
     let mut bytes =
-        serde_json::to_vec(config).map_err(|error| SyncError::InvalidConfig(error.to_string()))?;
+        serde_json::to_vec(&disk).map_err(|error| SyncError::InvalidConfig(error.to_string()))?;
 
     let mut options = OpenOptions::new();
     options.create(true).truncate(true).write(true);
@@ -1088,6 +1217,7 @@ fn status_from_config(config: &SyncConfig) -> SyncStatus {
         last_content_sha256: config.last_content_sha256.clone(),
         device_id: config.device_id.clone(),
         device_name: config.device_name.clone(),
+        secret_storage: secret_store::storage_label().to_owned(),
     }
 }
 
@@ -1099,6 +1229,7 @@ fn empty_status() -> SyncStatus {
         last_content_sha256: None,
         device_id: None,
         device_name: None,
+        secret_storage: secret_store::storage_label().to_owned(),
     }
 }
 
@@ -1194,6 +1325,7 @@ pub(crate) fn install_recovered_config(
         device_id: Some(device_id.to_string()),
         device_name: Some(device_name),
         device_signing_seed_hex: Some(device_signing_seed_hex),
+        credential_id: new_credential_id(),
     };
     save_config(vault_path, &config)?;
     Ok(status_from_config(&config))
