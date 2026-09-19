@@ -14,6 +14,8 @@ pub enum StoreError {
     Conflict { current_revision: u64 },
     #[error("account already exists")]
     AccountExists,
+    #[error("device already exists with different identity")]
+    DeviceExists,
     #[error("store failure")]
     Internal,
 }
@@ -96,6 +98,9 @@ impl From<StoreError> for ApiError {
         match value {
             StoreError::NotFound => Self::NotFound,
             StoreError::Conflict { current_revision } => Self::Conflict { current_revision },
+            StoreError::DeviceExists => Self::BadRequest(
+                "device ID is already registered with a different identity".to_owned(),
+            ),
             StoreError::AccountExists | StoreError::Internal => Self::Unavailable,
         }
     }
