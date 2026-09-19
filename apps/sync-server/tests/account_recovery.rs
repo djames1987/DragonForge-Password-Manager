@@ -132,7 +132,9 @@ fn request_message(
         path,
         timestamp,
         hex::encode(Sha256::digest(body)),
-        base_revision.map(|value| value.to_string()).unwrap_or_default()
+        base_revision
+            .map(|value| value.to_string())
+            .unwrap_or_default()
     )
     .into_bytes()
 }
@@ -199,12 +201,7 @@ async fn begin(
     let timestamp = now_seconds();
     let nonce_hex = nonce_byte.repeat(32);
     let signature = key.sign(&auth_message(
-        "begin",
-        account_id,
-        vault_id,
-        generation,
-        timestamp,
-        &nonce_hex,
+        "begin", account_id, vault_id, generation, timestamp, &nonce_hex,
     ));
     let body = serde_json::json!({
         "accountId": account_id,
