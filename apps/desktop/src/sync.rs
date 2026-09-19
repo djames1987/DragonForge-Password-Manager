@@ -155,15 +155,25 @@ pub(crate) fn configure(
     validate_server_url(server_url)?;
     validate_token(sync_token)?;
 
-    let mut config = SyncConfig {
-        version: SYNC_CONFIG_VERSION,
-        server_url: server_url.trim_end_matches('/').to_owned(),
-        sync_token: sync_token.to_owned(),
-        last_revision: 0,
-        last_content_sha256: None,
-        device_id: None,
-        device_name: None,
-        device_signing_seed_hex: None,
+    let normalized_url = server_url.trim_end_matches('/').to_owned();
+    let existing = load_config(vault_path)?;
+    let mut config = match existing {
+        Some(mut config)
+            if config.server_url == normalized_url && config.sync_token == sync_token =>
+        {
+            config.version = SYNC_CONFIG_VERSION;
+            config
+        }
+        _ => SyncConfig {
+            version: SYNC_CONFIG_VERSION,
+            server_url: normalized_url,
+            sync_token: sync_token.to_owned(),
+            last_revision: 0,
+            last_content_sha256: None,
+            device_id: None,
+            device_name: None,
+            device_signing_seed_hex: None,
+        },
     };
     ensure_device_identity(&mut config, None)?;
     save_config(vault_path, &config)?;
