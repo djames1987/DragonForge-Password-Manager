@@ -94,7 +94,7 @@ jobs:
 
   windows-desktop:
     name: Windows desktop build
-    runs-on: windows-latest
+    runs-on: self-hosted
     steps:
       - name: Checkout
         uses: actions/checkout@v4
