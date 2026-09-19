@@ -459,7 +459,7 @@ fn parse_hash_header(response: &Response) -> Result<String, SyncError> {
     Ok(hash)
 }
 
-fn read_response_bytes(mut response: Response) -> Result<Vec<u8>, SyncError> {
+fn read_response_bytes(response: Response) -> Result<Vec<u8>, SyncError> {
     let mut bytes = Vec::new();
     response
         .take(MAX_VAULT_FILE_BYTES + 1)
