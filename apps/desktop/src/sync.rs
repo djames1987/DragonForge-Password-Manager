@@ -206,15 +206,18 @@ pub(crate) fn configure(
     ensure_device_identity(&mut config, None)?;
     ensure_credential_id(&mut config);
     save_config(vault_path, &config)?;
-    cleanup_replaced_credential(old_credential_id.as_deref(), config.credential_id.as_deref())?;
+    cleanup_replaced_credential(
+        old_credential_id.as_deref(),
+        config.credential_id.as_deref(),
+    )?;
     Ok(status_from_config(&config))
 }
 
 pub(crate) fn remove(vault_path: &Path) -> Result<SyncStatus, SyncError> {
     #[cfg(target_os = "windows")]
     {
-        let credential_id = load_config(vault_path)?
-            .and_then(|config| config.credential_id.clone());
+        let credential_id =
+            load_config(vault_path)?.and_then(|config| config.credential_id.clone());
         if let Some(credential_id) = credential_id.as_deref() {
             secret_store::delete(credential_id).map_err(SyncError::SecretStorage)?;
         }
