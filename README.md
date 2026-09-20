@@ -454,3 +454,19 @@ test-logs\dragonforge-phase11-YYYYMMDD-HHMMSS.log.sha256
 ```
 
 See [docs/PHASE11_TESTING.md](docs/PHASE11_TESTING.md).
+
+## Workspace cleanup
+
+Repeated Rust debug/release/test builds can make the workspace `target` directory very large. DragonForge includes a conservative cleanup/report helper:
+
+```powershell
+.\scripts\cleanup-workspace.ps1
+```
+
+It is dry-run by default. To reclaim Cargo build artifacts:
+
+```powershell
+.\scripts\cleanup-workspace.ps1 -CleanCargoTarget -Apply
+```
+
+See [docs/WORKSPACE_CLEANUP.md](docs/WORKSPACE_CLEANUP.md) for retention and safety details.
