@@ -1,13 +1,13 @@
-use std::{
-    fs,
-    sync::{Arc, mpsc},
-    thread,
-};
 use dragonforge_desktop::{DesktopService, ItemDraft};
 use dragonforge_sync_server::{
     AccountRecord, AppState, InMemoryStore, SyncStore, build_router, hash_sync_token,
 };
 use sha2::{Digest, Sha256};
+use std::{
+    fs,
+    sync::{Arc, mpsc},
+    thread,
+};
 use tempfile::tempdir;
 use uuid::Uuid;
 
@@ -265,13 +265,7 @@ fn tampered_remote_snapshot_is_rejected_before_local_replacement() {
     let content_sha256: [u8; 32] = Sha256::digest(&tampered_bytes).into();
     let runtime = tokio::runtime::Runtime::new().unwrap();
     let stored = runtime
-        .block_on(store.put_vault(
-            account_id,
-            vault_id,
-            1,
-            tampered_bytes,
-            content_sha256,
-        ))
+        .block_on(store.put_vault(account_id, vault_id, 1, tampered_bytes, content_sha256))
         .unwrap();
     assert_eq!(stored.revision, 2);
 
