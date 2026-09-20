@@ -1,0 +1,12 @@
+# DragonForge Password Manager cargo-audit policy.
+#
+# RUSTSEC-2023-0071 affects rsa 0.9.x. The crate is present in Cargo.lock only
+# through sqlx-mysql 0.8.6. DragonForge disables SQLx default features and
+# enables PostgreSQL only; MySQL is not in the active workspace dependency
+# graph. scripts/run-phase11-tests.ps1 verifies that rsa 0.9.10 remains absent
+# from the all-target/all-feature active graph before cargo-audit is allowed to
+# rely on this exception.
+#
+# See docs/SECURITY_ADVISORIES.md.
+[advisories]
+ignore = ["RUSTSEC-2023-0071"]
