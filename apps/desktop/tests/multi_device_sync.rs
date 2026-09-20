@@ -2,10 +2,7 @@ use std::{
     fs,
     sync::{Arc, mpsc},
     thread,
-    time::{SystemTime, UNIX_EPOCH},
 };
-
-use dragonforge_crypto::MlDsa65KeyPair;
 use dragonforge_desktop::{DesktopService, ItemDraft};
 use dragonforge_sync_server::{
     AccountRecord, AppState, InMemoryStore, SyncStore, build_router, hash_sync_token,
@@ -40,6 +37,32 @@ fn start_sync_server() -> String {
 
     let address = receiver.recv().unwrap();
     format!("http://{address}")
+}
+
+fn start_sync_server_with_store() -> (String, InMemoryStore, Uuid) {
+    let store = InMemoryStore::default();
+    let account_id = Uuid::new_v4();
+    let account = AccountRecord {
+        account_id,
+        token_hash: hash_sync_token(TOKEN),
+    };
+
+    let runtime = tokio::runtime::Runtime::new().unwrap();
+    runtime.block_on(store.create_account(account)).unwrap();
+    let router = build_router(AppState::new(Arc::new(store.clone()), None));
+
+    let (sender, receiver) = mpsc::channel();
+    thread::spawn(move || {
+        let runtime = tokio::runtime::Runtime::new().unwrap();
+        runtime.block_on(async move {
+            let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+            sender.send(listener.local_addr().unwrap()).unwrap();
+            axum::serve(listener, router).await.unwrap();
+        });
+    });
+
+    let address = receiver.recv().unwrap();
+    (format!("http://{address}"), store, account_id)
 }
 
 fn login(name: &str, username: &str) -> ItemDraft {
@@ -214,7 +237,7 @@ fn explicit_keep_local_conflict_resolution_uploads_new_revision() {
 
 #[test]
 fn tampered_remote_snapshot_is_rejected_before_local_replacement() {
-    let server = start_sync_server();
+    let (server, store, account_id) = start_sync_server_with_store();
     let temp = tempdir().unwrap();
     let vault_path = temp.path().join("tamper-test.dfvault");
 
@@ -238,38 +261,19 @@ fn tampered_remote_snapshot_is_rejected_before_local_replacement() {
     ciphertext[0] = serde_json::Value::from((first_byte ^ 1) as u8);
     let tampered_bytes = serde_json::to_vec_pretty(&tampered_json).unwrap();
 
-    let vault_id = device.status().unwrap().vault_id.unwrap();
-    let sidecar_path = format!("{}.sync.json", vault_path.display());
-    let sidecar: serde_json::Value =
-        serde_json::from_slice(&fs::read(sidecar_path).unwrap()).unwrap();
-    let device_id = sidecar["deviceId"].as_str().unwrap();
-    let seed_hex = sidecar["deviceSigningSeedHex"].as_str().unwrap();
-    let seed = hex::decode(seed_hex).unwrap();
-    let key_pair = MlDsa65KeyPair::from_seed(&seed).unwrap();
-    let timestamp = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_secs();
-    let path = format!("/v1/vaults/{vault_id}");
-    let message = format!(
-        "dragonforge/device-request/v1\nPUT\n{}\n{}\n{}\n1",
-        path,
-        timestamp,
-        hex::encode(Sha256::digest(&tampered_bytes))
-    );
-    let signature = hex::encode(key_pair.sign(message.as_bytes()));
-    let response = reqwest::blocking::Client::new()
-        .put(format!("{server}{path}"))
-        .header("authorization", format!("Bearer {TOKEN}"))
-        .header("x-dragonforge-device-id", device_id)
-        .header("x-dragonforge-device-timestamp", timestamp.to_string())
-        .header("x-dragonforge-device-signature", signature)
-        .header("x-dragonforge-base-revision", "1")
-        .header("content-type", "application/octet-stream")
-        .body(tampered_bytes)
-        .send()
+    let vault_id = Uuid::parse_str(&device.status().unwrap().vault_id.unwrap()).unwrap();
+    let content_sha256: [u8; 32] = Sha256::digest(&tampered_bytes).into();
+    let runtime = tokio::runtime::Runtime::new().unwrap();
+    let stored = runtime
+        .block_on(store.put_vault(
+            account_id,
+            vault_id,
+            1,
+            tampered_bytes,
+            content_sha256,
+        ))
         .unwrap();
-    assert!(response.status().is_success());
+    assert_eq!(stored.revision, 2);
 
     let error = match device.sync_now() {
         Ok(_) => panic!("tampered remote snapshot was accepted"),
