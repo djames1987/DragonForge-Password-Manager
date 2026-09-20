@@ -71,6 +71,7 @@ try {
         "scripts/install-browser-native-host.ps1",
         "scripts/uninstall-browser-native-host.ps1",
         "scripts/test-browser-native-host.ps1",
+        "scripts/cleanup-workspace.ps1",
         "scripts/run-phase6-tests.ps1",
         "scripts/run-phase7-tests.ps1",
         "scripts/run-phase8-tests.ps1",
