@@ -153,7 +153,35 @@ try {
 
     $CargoAudit = Get-Command cargo-audit -ErrorAction SilentlyContinue
     if ($null -ne $CargoAudit) {
-        Write-Log "cargo-audit detected; running advisory scan"
+        Write-Log "=== RustSec advisory applicability ==="
+        Write-Log "Checking that rsa 0.9.10 remains outside the active all-target/all-feature workspace graph."
+        $previous = $ErrorActionPreference
+        try {
+            $ErrorActionPreference = "Continue"
+            $RsaTreeOutput = @(& cargo tree "-i" "rsa@0.9.10" "--workspace" "--all-features" "--target" "all" 2>&1)
+            $RsaTreeExitCode = $LASTEXITCODE
+        }
+        finally {
+            $ErrorActionPreference = $previous
+        }
+
+        foreach ($Line in $RsaTreeOutput) {
+            Write-RawLog $Line.ToString()
+        }
+
+        if ($null -eq $RsaTreeExitCode) { $RsaTreeExitCode = 0 }
+        if ($RsaTreeExitCode -ne 0) {
+            throw "Unable to verify RUSTSEC-2023-0071 applicability; cargo tree failed with exit code $RsaTreeExitCode."
+        }
+
+        $RsaTreeText = ($RsaTreeOutput | ForEach-Object { $_.ToString() }) -join "`n"
+        if ($RsaTreeText -match '(?m)^rsa v0\.9\.10(?:\s|$)') {
+            throw "RUSTSEC-2023-0071 exception is no longer valid: rsa 0.9.10 is active in the workspace dependency graph."
+        }
+        Write-Log "PASS: rsa 0.9.10 is absent from the active all-target/all-feature workspace graph."
+        Write-Log "INFO: RUSTSEC-2023-0071 is lockfile-only through inactive sqlx-mysql; see docs/SECURITY_ADVISORIES.md."
+
+        Write-Log "cargo-audit detected; running advisory scan with documented project policy"
         Invoke-Logged cargo "audit"
     }
     else {
