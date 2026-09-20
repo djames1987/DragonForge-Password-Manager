@@ -40,9 +40,9 @@ pub(crate) fn store(credential_id: &str, bundle: &SyncSecretBundle) -> Result<()
 #[cfg(target_os = "windows")]
 pub(crate) fn load(credential_id: &str) -> Result<SyncSecretBundle, String> {
     let entry = entry(credential_id)?;
-    let mut serialized = entry
-        .get_password()
-        .map_err(|error| format!("Windows Credential Manager sync secrets are unavailable: {error}"))?;
+    let mut serialized = entry.get_password().map_err(|error| {
+        format!("Windows Credential Manager sync secrets are unavailable: {error}")
+    })?;
     let parsed = serde_json::from_str(&serialized)
         .map_err(|error| format!("Windows Credential Manager sync secrets are malformed: {error}"));
     serialized.zeroize();
