@@ -16,7 +16,7 @@ DragonForge Password Manager is a Rust-based password manager built around a sim
 
 The project combines a hardened local encrypted vault, a native desktop application, Chrome/Edge browser integration, zero-knowledge multi-device synchronization, ML-DSA device identities, explicit device approval and revocation, offline disaster recovery, PostgreSQL-backed sync persistence, and Windows Credential Manager protection for local synchronization credentials.
 
-> **Project status:** active development through Phase 11. Phase 11 Windows Credential Manager hardening has passed the Windows debug/fast automated verification suite. Optimized release verification remains a separate gate.
+> **Project status:** active development through Phase 11. Phase 11 Windows Credential Manager hardening has passed the full Windows automated verification suite, including optimized release tests, release binary builds, the RustSec applicability guard, and cargo-audit under the documented advisory policy.
 >
 > **Security notice:** DragonForge has not undergone an independent cryptographic or application-security audit. It should not yet be used for production credentials or other high-value secrets.
 
