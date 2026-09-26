@@ -6,10 +6,15 @@ Thumbs.db
 .vscode/
 *.swp
 *.swo
+*.log
+*.tmp
+*.bak
 .env
 .env.*
 !.env.example
 /test-logs/
+validation-logs/
+support-bundles/
 
 # DragonForge vaults and per-vault sync credentials/state
 *.dfvault
@@ -18,3 +23,20 @@ Thumbs.db
 *.dfvault.sync.json
 *.dfvault.sync.json.tmp
 *.dfvault.sync.json.bak
+
+# Runtime databases, dumps, and crash material
+*.db
+*.sqlite
+*.sqlite3
+*.dmp
+*.dump
+core
+core.*
+
+# Private/signing key material must never be committed
+*.pem
+*.key
+*.pfx
+*.p12
+*.pvk
+*.snk
