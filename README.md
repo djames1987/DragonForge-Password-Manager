@@ -1,10 +1,14 @@
 # DragonForge Password Manager
 
+<p align="center">
+  <img src="docs/assets/readme/phase-05-hero.svg" alt="DragonForge Password Manager banner showing the native encrypted vault boundary, browser bridge, and opaque encrypted synchronization" width="100%">
+</p>
+
 DragonForge Password Manager is the historical standalone implementation of DragonForge's security-first, zero-knowledge password manager. It combines an encrypted local vault, Windows desktop application, Chromium browser integration, encrypted multi-device sync, device authorization, and account-recovery workflows with an emphasis on cryptographic agility.
 
 > **Repository status:** this repository is the verified pre-migration baseline. Active Password Manager development now lives in [DragonForge Security Suite](https://github.com/djames1987/DragonForge-Security-Suite). The standalone baseline completed Phase 11 Windows credential-protection verification before migration.
 
-For a more visual tour, see the [Product Overview](docs/PRODUCT_OVERVIEW.md).
+The root banner is new Phase 5 first-party SVG geometry and does not reuse the pre-existing icon/product-overview artwork covered by unresolved provenance gate `DF-P3-ASSET-001`. The existing [Product Overview](docs/PRODUCT_OVERVIEW.md) remains historical documentation but is not treated here as provenance-cleared public branding.
 
 ## Security architecture
 
@@ -24,7 +28,20 @@ Core properties include:
 
 The post-quantum implementation uses the RustCrypto `ml-kem` and `ml-dsa` crates rather than the older unmaintained `pqcrypto-*` bindings.
 
-See [Cryptography](docs/CRYPTOGRAPHY.md) and [Vault Format](docs/VAULT_FORMAT.md) for the detailed contracts.
+### Trust boundaries at a glance
+
+```mermaid
+flowchart LR
+    User[User] --> Desktop[Native Tauri / Rust desktop]
+    Desktop --> Vault[Encrypted local vault]
+    Browser[Chromium extension] --> Host[Native messaging host]
+    Host --> Desktop
+    Desktop --> Sync[Zero-knowledge sync service]
+    Sync --> Cipher[Opaque encrypted vault bytes + sync metadata]
+    Recovery[User-held recovery kit] --> Desktop
+```
+
+The browser extension and sync service are not decryption authorities. See [Cryptography](docs/CRYPTOGRAPHY.md) and [Vault Format](docs/VAULT_FORMAT.md) for the detailed contracts.
 
 ## Desktop application
 
@@ -60,6 +77,10 @@ The sync design includes:
 
 The PostgreSQL-backed server and in-memory test implementation share the same protocol model. See the Phase 7–11 documents under [`docs/`](docs/) for setup and protocol details.
 
+### Screenshots
+
+No desktop/browser screenshot is fabricated in this phase. Genuine captures must be taken from a clean demo vault with synthetic credentials and with recovery/device secrets excluded. The exact capture set is defined in [Public Screenshot Capture](docs/PUBLIC_SCREENSHOT_CAPTURE.md).
+
 ## Quick start
 
 On Windows, after installing the Rust toolchain plus the Microsoft C++/WebView2 prerequisites:
@@ -93,7 +114,7 @@ Before public publication, the custom icon/documentation assets remain subject t
 
 ## Documentation
 
-- [Product Overview](docs/PRODUCT_OVERVIEW.md) — visual feature and architecture tour
+- [Product Overview](docs/PRODUCT_OVERVIEW.md) — historical visual feature and architecture tour; existing artwork remains provenance-gated
 - [Cryptography](docs/CRYPTOGRAPHY.md) — cryptographic primitives and key hierarchy
 - [Vault Format](docs/VAULT_FORMAT.md) — encrypted storage contract
 - [Desktop Architecture](docs/PHASE5_DESKTOP.md) — native/webview application boundary
@@ -103,6 +124,7 @@ Before public publication, the custom icon/documentation assets remain subject t
 - [Device Enrollment](docs/PHASE9_DEVICE_ENROLLMENT.md)
 - [Account Recovery](docs/PHASE10_ACCOUNT_RECOVERY.md)
 - [Windows Credential Protection](docs/PHASE11_CREDENTIAL_PROTECTION.md)
+- [Public Screenshot Capture](docs/PUBLIC_SCREENSHOT_CAPTURE.md) — synthetic demo and sanitization rules
 - [Security Policy](SECURITY.md)
 - [Third-party notices](THIRD_PARTY_NOTICES.md)
 - [`docs/`](docs/) — complete phase and validation history
