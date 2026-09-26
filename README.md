@@ -6,6 +6,16 @@ DragonForge Password Manager is a security-first, zero-knowledge password manage
 
 > **Development status:** Phase 11 — Windows Credential Protection & Sidecar Secret Migration **COMPLETE; FULL WINDOWS RELEASE VERIFICATION PASSED**
 
+## License and repository status
+
+Copyright © 2026 David James. All rights reserved.
+
+This repository is the historical pre-migration source and verified baseline for DragonForge Password Manager. Active Password Manager development now occurs in [DragonForge Security Suite](https://github.com/djames1987/DragonForge-Security-Suite).
+
+The original DragonForge material in this repository is source-visible for evaluation, portfolio review, security review, and reference, but it is **not open source**. Except for rights expressly required by GitHub's Terms of Service for public repositories, no general license is granted to use, copy, modify, redistribute, sublicense, sell, commercially exploit, or incorporate original DragonForge material into another work.
+
+See [LICENSE](LICENSE). Third-party components retain their independent licenses and rights.
+
 ## Completed phases
 
 ### Phase 1 — Cryptographic Foundation
