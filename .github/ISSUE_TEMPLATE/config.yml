@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Current Password Manager development
+    url: https://github.com/djames1987/DragonForge-Security-Suite/issues
+    about: Use the canonical Security Suite repository for current non-security bugs and feature requests.
+  - name: Security vulnerability
+    url: https://github.com/djames1987/DragonForge-Password-Manager/security/advisories/new
+    about: Report vulnerabilities in this historical baseline privately.

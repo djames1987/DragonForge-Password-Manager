@@ -1,0 +1,34 @@
+name: Historical baseline bug
+description: Report a reproducible non-security defect specific to the standalone historical baseline
+title: "[Historical Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Active Password Manager development is in DragonForge Security Suite. Do not include passwords, Account Secrets, recovery material, OTP seeds, tokens, keys, vault contents, personal data, or exploit details. Use SECURITY.md for vulnerabilities.
+  - type: input
+    id: commit
+    attributes:
+      label: Standalone commit/version
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction steps
+      description: Use synthetic vault/test data only.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: observed
+    attributes:
+      label: Observed behavior
+    validations:
+      required: true
