@@ -8,7 +8,7 @@ publish = false
 description = "Cryptographic foundation for DragonForge Password Manager"
 
 [dependencies]
-aes-gcm = "0.10.3"
+aes-gcm = "0.11.1"
 argon2 = "0.5.3"
 hkdf = "0.12.4"
 ml-dsa = { version = "0.1.1", features = ["alloc", "getrandom", "zeroize"] }
