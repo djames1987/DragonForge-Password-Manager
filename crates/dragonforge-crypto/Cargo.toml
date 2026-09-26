@@ -10,7 +10,7 @@ description = "Cryptographic foundation for DragonForge Password Manager"
 [dependencies]
 aes-gcm = "0.10.3"
 argon2 = "0.5.3"
-hkdf = "0.12.4"
+hkdf = "0.13.0"
 ml-dsa = { version = "0.1.1", features = ["alloc", "getrandom", "zeroize"] }
 ml-kem = { version = "0.3.2", features = ["getrandom", "zeroize"] }
 rand_core = { version = "0.6.4", features = ["getrandom"] }
