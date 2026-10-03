@@ -37,7 +37,7 @@ uuid = { version = "1.18", features = ["v4", "serde"] }
 zeroize = { version = "1.8", features = ["zeroize_derive"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
-keyring = { version = "3.6.3", features = ["windows-native"] }
+keyring = { version = "4.2.0", features = ["windows-native"] }
 
 [build-dependencies]
 tauri-build = { version = "2.6.3", features = [] }
